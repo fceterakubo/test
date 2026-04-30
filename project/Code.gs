@@ -199,20 +199,7 @@ function getNextId(sheet) {
 }
 
 function updateItemStock(itemId, delta) {
-  var sheet   = getSheet('items');
-  var headers = getHeaders(sheet);
-  var data    = getSheetData(sheet);
-  var colId    = headers.indexOf('id');
-  var colStock = headers.indexOf('stock');
-  if (colId < 0 || colStock < 0) return;
-  for (var i = 0; i < data.length; i++) {
-    if (String(data[i][colId]) === String(itemId)) {
-      var rowNum     = i + 2;
-      var currentVal = parseInt(data[i][colStock], 10) || 0;
-      sheet.getRange(rowNum, colStock + 1).setValue(Math.max(0, currentVal + delta));
-      return;
-    }
-  }
+  // トランザクションから計算する方式に変更したため何もしない
 }
 
 function getCurrentStock(itemId) {
