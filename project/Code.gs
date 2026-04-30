@@ -53,10 +53,42 @@ function handleLogin(params) {
 }
 
 function handleGetItems() {
-  var sheet   = getSheet('items');
-  var headers = getHeaders(sheet);
-  var data    = getSheetData(sheet);
-  var items   = data.map(function(row) { return rowToObject(headers, row); });
+  var itemSheet = getSheet('items');
+  var headers   = getHeaders(itemSheet);
+  var data      = getSheetData(itemSheet);
+  var colId     = headers.indexOf('id');
+  var colName   = headers.indexOf('name');
+
+  var txSheet   = getSheet('transactions');
+  var txHeaders = getHeaders(txSheet);
+  var txData    = getSheetData(txSheet);
+  var txColItemId  = txHeaders.indexOf('item_id');
+  var txColType    = txHeaders.indexOf('type');
+  var txColQty     = txHeaders.indexOf('quantity');
+
+  var items = data.map(function(row) {
+    var itemId = String(row[colId]);
+
+    // トランザクションから在庫を毎回計算
+    var stock = 0;
+    txData.forEach(function(tx) {
+      if (String(tx[txColItemId]) === itemId) {
+        var qty = parseInt(tx[txColQty], 10) || 0;
+        if (String(tx[txColType]) === '入庫') {
+          stock += qty;
+        } else if (String(tx[txColType]) === '出庫') {
+          stock -= qty;
+        }
+      }
+    });
+
+    return {
+      id:    itemId,
+      name:  String(row[colName]),
+      stock: stock,
+    };
+  });
+
   return createJsonResponse({ success: true, items: items });
 }
 
@@ -94,10 +126,29 @@ function handleStockOut(params) {
   if (!itemId || isNaN(quantity) || quantity < 1 || !event || !date) {
     return createJsonResponse({ success: false, message: '入力値が不正です' });
   }
-  var currentStock = getCurrentStock(itemId);
-  if (currentStock < quantity) {
-    return createJsonResponse({ success: false, message: '在庫が不足しています（現在庫: ' + currentStock + '個）' });
-  }
+  function getCurrentStock(itemId) {
+  var txSheet   = getSheet('transactions');
+  var txHeaders = getHeaders(txSheet);
+  var txData    = getSheetData(txSheet);
+  var txColItemId = txHeaders.indexOf('item_id');
+  var txColType   = txHeaders.indexOf('type');
+  var txColQty    = txHeaders.indexOf('quantity');
+
+  var stock = 0;
+  txData.forEach(function(tx) {
+    if (String(tx[txColItemId]) === String(itemId)) {
+      var qty = parseInt(tx[txColQty], 10) || 0;
+      if (String(tx[txColType]) === '入庫') {
+        stock += qty;
+      } else if (String(tx[txColType]) === '出庫') {
+        stock -= qty;
+      }
+    }
+  });
+
+  return stock;
+}
+
   var txSheet = getSheet('transactions');
   var newTxId = getNextId(txSheet);
   txSheet.appendRow([newTxId, itemId, '出庫', quantity, event, memo, user, date]);
