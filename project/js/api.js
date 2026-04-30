@@ -8,7 +8,7 @@
 // ============================================================
 // GAS WebアプリのデプロイURL（デプロイ後にここを書き換える）
 // ============================================================
-const GAS_URL = https://script.google.com/macros/s/AKfycbwtfdEZr5hc1bFhBUDLzt_FBIk3CW0wTS9PPsqWFTrqy0RZmZzD8aDkI3782VcBYsP1/exec
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwtfdEZr5hc1bFhBUDLzt_FBIk3CW0wTS9PPsqWFTrqy0RZmZzD8aDkI3782VcBYsP1/exec";
 
 // ============================================================
 // 内部ユーティリティ
