@@ -38,4 +38,12 @@ async function apiStockIn(payload) {
 
 async function apiStockOut(payload) {
   return gasGet({
-    action:   'stockOu
+    action:   'stockOut',
+    item_id:  payload.item_id,
+    quantity: payload.quantity,
+    event:    payload.event,
+    memo:     payload.memo || '',
+    date:     payload.date,
+    user:     payload.user,
+  });
+}
