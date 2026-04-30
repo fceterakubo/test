@@ -19,7 +19,7 @@
 // ============================================================
 
 /** GoogleスプレッドシートのID（URLの /d/〇〇〇/edit の部分）*/
-var SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID';
+var SPREADSHEET_ID = '16qQ4nwiqmxF4U7djpmp9EKXFz3GDyRjO6crcb1j-OO0';
 
 /** 在庫僅少の警告閾値 */
 var STOCK_WARNING_THRESHOLD = 50;
