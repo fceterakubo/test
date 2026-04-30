@@ -234,7 +234,6 @@ function renderInventoryTable(stockList) {
       </td>
       <td>${renderStockBadge(item.currentStock)}</td>
       <td style="color:var(--color-text-muted); font-size:13px;">
-        初期: ${Number(item.baseStock).toLocaleString()} /
         入庫: +${item.inTotal.toLocaleString()} /
         出庫: -${item.outTotal.toLocaleString()}
       </td>
