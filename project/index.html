@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<!--
+  index.html
+  役割：ログイン画面
+  ユーザー名とパスワードを入力し、GASで認証を行う。
+  認証成功後は dashboard.html へリダイレクトする。
+-->
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ログイン｜パンフレット在庫管理</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="login-page">
+
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">📦</span>
+      <h1>パンフレット在庫管理</h1>
+      <p>展示会・イベント向け入出庫システム</p>
+    </div>
+
+    <form id="loginForm" novalidate>
+      <div class="form-group">
+        <label for="username">ユーザー名</label>
+        <input
+          type="text"
+          id="username"
+          name="username"
+          placeholder="ユーザー名を入力"
+          autocomplete="username"
+          required
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="password">パスワード</label>
+        <input
+          type="password"
+          id="password"
+          name="password"
+          placeholder="パスワードを入力"
+          autocomplete="current-password"
+          required
+        />
+      </div>
+
+      <button type="submit" class="btn-login" id="loginBtn">
+        ログイン
+      </button>
+
+      <p class="login-error" id="loginError" aria-live="polite"></p>
+    </form>
+  </div>
+
+  <!-- 通信処理 → 認証ロジックの順で読み込む -->
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    // auth.js の initLoginPage() を呼び出してフォームを初期化
+    initLoginPage();
+  </script>
+</body>
+</html>

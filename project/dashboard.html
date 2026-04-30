@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<!--
+  dashboard.html
+  役割：メイン画面（在庫一覧・入庫・出庫・履歴）
+  ログイン済みユーザーのみアクセス可。
+  サイドバーのナビゲーションでタブを切り替えて各機能を使用する。
+-->
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ダッシュボード｜パンフレット在庫管理</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<div class="app-layout">
+
+  <!-- ========== サイドバー ========== -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="app-title">📦 パンフレット<br>在庫管理</div>
+      <div class="app-sub">展示会・イベント向けシステム</div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-item active" data-tab="inventory">
+        <span class="nav-icon">📋</span>
+        <span>在庫一覧</span>
+      </div>
+      <div class="nav-item" data-tab="stock-in">
+        <span class="nav-icon">📥</span>
+        <span>入庫登録</span>
+      </div>
+      <div class="nav-item" data-tab="stock-out">
+        <span class="nav-icon">📤</span>
+        <span>出庫登録</span>
+      </div>
+      <div class="nav-item" data-tab="history">
+        <span class="nav-icon">📊</span>
+        <span>入出庫履歴</span>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-info">
+        ログイン中
+        <strong id="sidebarUsername">---</strong>
+      </div>
+      <button class="btn-logout" id="logoutBtn">ログアウト</button>
+    </div>
+  </aside>
+
+  <!-- ========== メインコンテンツ ========== -->
+  <div class="main-content">
+
+    <!-- トップバー -->
+    <header class="topbar">
+      <div class="topbar-title" id="topbarTitle">在庫一覧</div>
+      <div class="topbar-actions" id="topbarActions">
+        <button class="btn btn-success" id="btnOpenStockIn">
+          📥 入庫登録
+        </button>
+        <button class="btn btn-danger" id="btnOpenStockOut">
+          📤 出庫登録
+        </button>
+      </div>
+    </header>
+
+    <main class="page-content">
+
+      <!-- ========== 在庫一覧タブ ========== -->
+      <section class="tab-panel active" id="tab-inventory">
+        <!-- サマリーカード -->
+        <div class="summary-grid" id="summaryGrid">
+          <div class="summary-card">
+            <div class="s-label">アイテム数</div>
+            <div class="s-value" id="sumTotal">-</div>
+            <div class="s-unit">種類</div>
+          </div>
+          <div class="summary-card warning">
+            <div class="s-label">在庫僅少</div>
+            <div class="s-value" id="sumWarning">-</div>
+            <div class="s-unit">種類（50個以下）</div>
+          </div>
+          <div class="summary-card danger">
+            <div class="s-label">在庫切れ</div>
+            <div class="s-value" id="sumZero">-</div>
+            <div class="s-unit">種類（0個）</div>
+          </div>
+          <div class="summary-card">
+            <div class="s-label">総在庫数</div>
+            <div class="s-value" id="sumAll">-</div>
+            <div class="s-unit">個</div>
+          </div>
+        </div>
+
+        <!-- 在庫テーブル -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">アイテム別在庫状況</span>
+            <button class="btn btn-secondary btn-sm" id="btnRefreshInventory">
+              🔄 更新
+            </button>
+          </div>
+          <div class="card-body" style="padding: 0;">
+            <div id="inventoryTableContainer">
+              <div class="loading-spinner">
+                <div class="spinner"></div>読み込み中...
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 入庫登録タブ ========== -->
+      <section class="tab-panel" id="tab-stock-in">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📥 入庫登録</span>
+          </div>
+          <div class="card-body">
+            <p style="color: var(--color-text-muted); margin-bottom: 20px;">
+              在庫に追加するアイテムと数量を選択して「入庫登録」ボタンを押してください。
+            </p>
+            <div class="form-group">
+              <label for="siItem">アイテム</label>
+              <select id="siItem">
+                <option value="">-- アイテムを選択 --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="siQty">入庫数量</label>
+              <input type="number" id="siQty" min="1" placeholder="例：100" />
+            </div>
+            <div class="form-group">
+              <label for="siMemo">メモ（任意）</label>
+              <textarea id="siMemo" placeholder="入荷元・備考など"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="siDate">日付</label>
+              <input type="date" id="siDate" />
+            </div>
+            <div style="display:flex; justify-content:flex-end; margin-top: 8px;">
+              <button class="btn btn-success" id="btnSubmitStockIn">
+                📥 入庫登録
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 出庫登録タブ ========== -->
+      <section class="tab-panel" id="tab-stock-out">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📤 出庫登録</span>
+          </div>
+          <div class="card-body">
+            <p style="color: var(--color-text-muted); margin-bottom: 20px;">
+              出庫するアイテム・数量・イベント情報を入力して「出庫登録」ボタンを押してください。
+            </p>
+            <div class="form-group">
+              <label for="soItem">アイテム</label>
+              <select id="soItem">
+                <option value="">-- アイテムを選択 --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="soQty">出庫数量</label>
+              <input type="number" id="soQty" min="1" placeholder="例：50" />
+            </div>
+            <div class="form-group">
+              <label for="soEvent">イベント名</label>
+              <input type="text" id="soEvent" placeholder="例：東京展示会2026" />
+            </div>
+            <div class="form-group">
+              <label for="soMemo">メモ（任意）</label>
+              <textarea id="soMemo" placeholder="ブース番号・担当者など"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="soDate">日付</label>
+              <input type="date" id="soDate" />
+            </div>
+            <div style="display:flex; justify-content:flex-end; margin-top: 8px;">
+              <button class="btn btn-danger" id="btnSubmitStockOut">
+                📤 出庫登録
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 履歴タブ ========== -->
+      <section class="tab-panel" id="tab-history">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">入出庫履歴</span>
+            <button class="btn btn-secondary btn-sm" id="btnRefreshHistory">
+              🔄 更新
+            </button>
+          </div>
+          <div class="card-body" style="padding: 16px 24px;">
+            <!-- フィルターバー -->
+            <div class="filter-bar" style="margin-bottom: 16px;">
+              <div class="form-group" style="min-width:160px;">
+                <label for="filterItem">アイテム</label>
+                <select id="filterItem">
+                  <option value="">すべて</option>
+                </select>
+              </div>
+              <div class="form-group" style="min-width:130px;">
+                <label for="filterType">種別</label>
+                <select id="filterType">
+                  <option value="">すべて</option>
+                  <option value="入庫">入庫</option>
+                  <option value="出庫">出庫</option>
+                </select>
+              </div>
+              <div class="form-group" style="min-width:140px;">
+                <label for="filterDateFrom">日付（開始）</label>
+                <input type="date" id="filterDateFrom" />
+              </div>
+              <div class="form-group" style="min-width:140px;">
+                <label for="filterDateTo">日付（終了）</label>
+                <input type="date" id="filterDateTo" />
+              </div>
+              <div class="form-group" style="align-self:flex-end;">
+                <button class="btn btn-primary btn-sm" id="btnApplyFilter">絞り込む</button>
+                <button class="btn btn-secondary btn-sm" id="btnClearFilter" style="margin-left:6px;">クリア</button>
+              </div>
+            </div>
+          </div>
+          <div class="card-body" style="padding: 0;">
+            <div id="historyTableContainer">
+              <div class="loading-spinner">
+                <div class="spinner"></div>読み込み中...
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div><!-- /.main-content -->
+</div><!-- /.app-layout -->
+
+<!-- ========== 入庫モーダル（クイック登録）========== -->
+<div class="modal-overlay" id="modalStockIn" role="dialog" aria-modal="true" aria-labelledby="modalStockInTitle">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modalStockInTitle">📥 入庫登録</span>
+      <button class="modal-close" data-close="modalStockIn" aria-label="閉じる">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label for="msiItem">アイテム <span style="color:var(--color-danger)">*</span></label>
+        <select id="msiItem">
+          <option value="">-- アイテムを選択 --</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="msiQty">入庫数量 <span style="color:var(--color-danger)">*</span></label>
+        <input type="number" id="msiQty" min="1" placeholder="例：100" />
+      </div>
+      <div class="form-group">
+        <label for="msiMemo">メモ（任意）</label>
+        <textarea id="msiMemo" placeholder="入荷元・備考など"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="msiDate">日付 <span style="color:var(--color-danger)">*</span></label>
+        <input type="date" id="msiDate" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" data-close="modalStockIn">キャンセル</button>
+      <button class="btn btn-success" id="btnModalSubmitStockIn">📥 入庫登録</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 出庫モーダル ========== -->
+<div class="modal-overlay" id="modalStockOut" role="dialog" aria-modal="true" aria-labelledby="modalStockOutTitle">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modalStockOutTitle">📤 出庫登録</span>
+      <button class="modal-close" data-close="modalStockOut" aria-label="閉じる">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label for="msoItem">アイテム <span style="color:var(--color-danger)">*</span></label>
+        <select id="msoItem">
+          <option value="">-- アイテムを選択 --</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="msoQty">出庫数量 <span style="color:var(--color-danger)">*</span></label>
+        <input type="number" id="msoQty" min="1" placeholder="例：50" />
+      </div>
+      <div class="form-group">
+        <label for="msoEvent">イベント名 <span style="color:var(--color-danger)">*</span></label>
+        <input type="text" id="msoEvent" placeholder="例：東京展示会2026" />
+      </div>
+      <div class="form-group">
+        <label for="msoMemo">メモ（任意）</label>
+        <textarea id="msoMemo" placeholder="ブース番号・担当者など"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="msoDate">日付 <span style="color:var(--color-danger)">*</span></label>
+        <input type="date" id="msoDate" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" data-close="modalStockOut">キャンセル</button>
+      <button class="btn btn-danger" id="btnModalSubmitStockOut">📤 出庫登録</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== トースト通知コンテナ ========== -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- スクリプト読み込み（依存関係順） -->
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/inventory.js"></script>
+<script src="js/ui.js"></script>
+<script>
+  // ダッシュボード初期化
+  initDashboard();
+</script>
+</body>
+</html>
