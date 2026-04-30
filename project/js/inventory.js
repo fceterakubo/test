@@ -23,23 +23,20 @@ const STOCK_WARNING_THRESHOLD = 50;
  * @returns {Array} 各アイテムに currentStock を付与した配列
  */
 function calcCurrentStocks(items, transactions) {
-  // アイテムIDをキーに初期在庫をセット
   const stockMap = {};
   items.forEach((item) => {
     stockMap[String(item.id)] = {
       ...item,
-      baseStock:    Number(item.stock) || 0,
+      baseStock:    0,
       inTotal:      0,
       outTotal:     0,
-      currentStock: Number(item.stock) || 0,
+      currentStock: 0,  // ← 初期値を0に変更
     };
   });
 
-  // トランザクションを積み上げ
   transactions.forEach((tx) => {
     const key = String(tx.item_id);
     if (!stockMap[key]) return;
-
     const qty = Number(tx.quantity) || 0;
     if (tx.type === '入庫') {
       stockMap[key].inTotal      += qty;
@@ -50,7 +47,6 @@ function calcCurrentStocks(items, transactions) {
     }
   });
 
-  // マイナスにならないようにガード
   return Object.values(stockMap).map((item) => ({
     ...item,
     currentStock: Math.max(0, item.currentStock),
