@@ -118,6 +118,7 @@ body {
 .btn.blue { background: linear-gradient(#5DB8FF, #2A7FE0); box-shadow: 0 5px 0 #1C5FB0, 0 10px 18px rgba(28, 95, 176, .25); }
 .btn:active { transform: translateY(4px); box-shadow: none; }
 .tri { width: 0; height: 0; border-left: 16px solid var(--white); border-top: 10px solid transparent; border-bottom: 10px solid transparent; }
+.toggles { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; }
 .text-btn { margin-top: 12px; background: none; border: 0; cursor: pointer; font: 700 13px var(--body); color: #7A5A46; text-decoration: underline; text-underline-offset: 3px; }
 .result { font: 800 18px var(--display); margin: 10px 0 4px; }
 .result b { font-size: 44px; color: var(--orange); }
@@ -167,7 +168,7 @@ body {
         <button class="btn green" id="zenBtn" type="button"><span class="tri"></span>スタート <small>のんびり・ずっとあそべる</small></button>
         <button class="btn orange" id="chBtn" type="button">チャレンジ <small>ライフ3つ</small></button>
       </div>
-      <button class="text-btn" id="muteBtn1" type="button">おと：ON</button>
+      <div class="toggles"><button class="text-btn" id="bgmBtn1" type="button">おんがく：ON</button><button class="text-btn" id="muteBtn1" type="button">こうかおん：ON</button></div>
     </div>
   </div>
 
@@ -179,7 +180,7 @@ body {
         <button class="btn green" id="resumeBtn" type="button"><span class="tri"></span>つづける</button>
         <button class="btn blue" id="menuBtn" type="button">さいしょの画面へ</button>
       </div>
-      <button class="text-btn" id="muteBtn2" type="button">おと：ON</button>
+      <div class="toggles"><button class="text-btn" id="bgmBtn2" type="button">おんがく：ON</button><button class="text-btn" id="muteBtn2" type="button">こうかおん：ON</button></div>
     </div>
   </div>
 
@@ -491,7 +492,8 @@ body {
   let items = [], parts = [], pops = [];
   let mode = 'zen', playing = false, paused = false, score = 0, combo = 0, lives = 3;
   let muted = store.get('kumausa-muted', false);
-  let spawnDist = 0, beltOffset = 0, lastT = 0, clock = 0, drag = null;
+  let bgmOn = store.get('kumausa-bgm', true);
+  let beltOffset = 0, lastT = 0, clock = 0, drag = null;
   const animals = {
     bear:   { kind: 'bear',   food: 'pancake', mood: 'idle', moodT: 0, hold: null, belly: 0, party: 0, blinkT: 2, bubble: null },
     rabbit: { kind: 'rabbit', food: 'shake',   mood: 'idle', moodT: 0, hold: null, belly: 0, party: 0, blinkT: 3.3, bubble: null }
@@ -657,12 +659,12 @@ body {
 
   // ---------------- sound ----------------
   let ac = null;
-  function audio() {
-    if (muted) return null;
+  function getAC() {
     if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
     if (ac.state === 'suspended') ac.resume();
     return ac;
   }
+  function audio() { return muted ? null : getAC(); }
   function tone(freq, start, dur, type = 'sine', vol = .12) {
     const a = audio(); if (!a) return;
     const o = a.createOscillator(), g = a.createGain(), t0 = a.currentTime + start;
@@ -670,6 +672,55 @@ body {
     g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + .015); g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
     o.connect(g).connect(a.destination); o.start(t0); o.stop(t0 + dur + .02);
   }
+
+  // ---------------- BGM (generated, loops 8 bars: C Am F G C Am Dm G) ----------------
+  const NOTE = n => { const m = /^([A-G])(#?)(\d)$/.exec(n); return 440 * Math.pow(2, ((+m[3] + 1) * 12 + 'C D EF G A B'.indexOf(m[1]) + (m[2] ? 1 : 0) - 69) / 12); };
+  const MELODY = [
+    'E5', '', 'G5', '', 'C6', '', 'G5', '',      'A5', '', 'G5', 'E5', '', 'C5', '', '',
+    'F5', '', 'A5', '', 'C6', '', 'A5', 'G5',    'G5', '', '', 'D5', 'E5', 'F5', 'G5', '',
+    'E5', 'G5', 'C6', '', 'B5', 'C6', 'D6', '',  'C6', '', 'A5', '', 'E5', '', 'G5', '',
+    'F5', '', 'E5', '', 'D5', '', 'F5', '',      'E5', '', 'D5', '', 'G4', '', '', ''
+  ];
+  const CHORDS = [['C3', 'E4', 'G4', 'C5'], ['A2', 'C4', 'E4', 'A4'], ['F2', 'A4', 'C5', 'F4'], ['G2', 'B4', 'D5', 'G4'],
+                  ['C3', 'E4', 'G4', 'C5'], ['A2', 'C4', 'E4', 'A4'], ['D3', 'F4', 'A4', 'D5'], ['G2', 'B4', 'D5', 'F4']];
+  const bgm = { gain: null, timer: 0, step: 0, next: 0, noise: null };
+  function bgmVoice(freq, t, dur, type, vol, dest) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .012); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    o.connect(g).connect(dest); o.start(t); o.stop(t + dur + .05);
+  }
+  function bgmShaker(t, vol) {
+    const src = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+    src.buffer = bgm.noise; f.type = 'highpass'; f.frequency.value = 7000;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + .05);
+    src.connect(f).connect(g).connect(bgm.gain); src.start(t); src.stop(t + .06);
+  }
+  function bgmSchedule() {
+    const eighth = 60 / (mode === 'challenge' ? 124 : 112) / 2;
+    while (bgm.next < ac.currentTime + .15) {
+      const t = bgm.next, i = bgm.step % 64, bar = Math.floor(i / 8), beat = i % 8, ch = CHORDS[bar];
+      const m = MELODY[i];
+      if (m) { bgmVoice(NOTE(m), t, .32, 'triangle', .22, bgm.gain); bgmVoice(NOTE(m) * 2, t, .18, 'sine', .05, bgm.gain); }
+      if (beat === 0 || beat === 4) bgmVoice(NOTE(ch[0]), t, eighth * 3, 'sine', .3, bgm.gain);
+      if (beat === 2 || beat === 6) ch.slice(1).forEach(n => bgmVoice(NOTE(n), t, .16, 'triangle', .06, bgm.gain));
+      bgmShaker(t, beat % 2 ? .05 : .09);
+      bgm.step++; bgm.next += eighth;
+    }
+  }
+  function bgmStart() {
+    if (!bgmOn || bgm.timer || !getAC()) return;
+    if (!bgm.gain) {
+      bgm.gain = ac.createGain(); bgm.gain.gain.value = .32;
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 5200;
+      bgm.gain.connect(lp).connect(ac.destination);
+      bgm.noise = ac.createBuffer(1, ac.sampleRate * .1, ac.sampleRate);
+      const d = bgm.noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    bgm.next = ac.currentTime + .08;
+    bgmSchedule(); bgm.timer = setInterval(bgmSchedule, 30);
+  }
+  function bgmStop() { clearInterval(bgm.timer); bgm.timer = 0; }
   const SCALE = [523, 587, 659, 784, 880, 1047, 1175, 1319];
   const sfxYum = () => { const n = SCALE[Math.min(combo, 20) % SCALE.length]; tone(n, 0, .12, 'triangle'); tone(n * 1.5, .07, .14, 'sine', .08); };
   const sfxNo = () => { tone(240, 0, .12, 'square', .04); tone(190, .1, .18, 'square', .04); };
@@ -681,7 +732,6 @@ body {
   function prefill() {
     items = [];
     for (let x = L.beltEnd - L.s * 1.2; x > -L.s; x -= L.s * 1.7) spawn(x);
-    spawnDist = 0;
   }
   const speed = () => L.k * 1.25 * (1 + Math.min(1, score / 100) * (mode === 'challenge' ? 1.2 : .7));
 
@@ -693,15 +743,17 @@ body {
     $('lives').hidden = mode !== 'challenge'; $('modePill').hidden = mode === 'challenge';
     updateHud(); banner('がんばろう！');
     audio(); tone(784, 0, .1, 'triangle'); tone(1047, .08, .14, 'triangle');
+    bgm.step = 0; bgmStop(); bgmStart();
   }
   function setPaused(p) {
     if (!playing) return;
     paused = p; $('pauseOv').hidden = !p;
+    if (p) bgmStop(); else bgmStart();
     if (p) $('pauseBest').textContent = `いま ${score} こ ／ ベスト ${store.get(bestKey(), 0)} こ`;
   }
-  function toMenu() { playing = false; paused = false; $('pauseOv').hidden = $('overOv').hidden = true; $('startOv').hidden = false; }
+  function toMenu() { bgmStop(); playing = false; paused = false; $('pauseOv').hidden = $('overOv').hidden = true; $('startOv').hidden = false; }
   function gameOver() {
-    playing = false;
+    playing = false; bgmStop();
     setTimeout(() => {
       $('finalScore').textContent = score;
       $('overBest').textContent = `ベスト ${store.get(bestKey(), 0)} こ`;
@@ -726,7 +778,10 @@ body {
     $('lives').innerHTML = [0, 1, 2].map(i => HEART(i < lives)).join('');
     $('lives').setAttribute('aria-label', `ライフ のこり ${lives}`);
   }
-  function renderMute() { ['muteBtn1', 'muteBtn2'].forEach(id => { $(id).textContent = muted ? 'おと：OFF' : 'おと：ON'; }); }
+  function renderMute() {
+    ['muteBtn1', 'muteBtn2'].forEach(id => { $(id).textContent = muted ? 'こうかおん：OFF' : 'こうかおん：ON'; $(id).setAttribute('aria-pressed', String(!muted)); });
+    ['bgmBtn1', 'bgmBtn2'].forEach(id => { $(id).textContent = bgmOn ? 'おんがく：ON' : 'おんがく：OFF'; $(id).setAttribute('aria-pressed', String(bgmOn)); });
+  }
 
   function sendTo(it, who) {
     const an = animals[who];
@@ -792,7 +847,7 @@ body {
     if (!playing || paused) return;
     const p = pos(e), it = hitItem(p);
     if (it) {
-      it.state = 'drag'; it.sc = 1.15;
+      it.state = 'drag'; it.sc = 1.15; it.slotX = it.x;
       drag = { it, id: e.pointerId, sx: p.x, sy: p.y, moved: false, ox: it.x - p.x, oy: it.y - p.y };
       try { cv.setPointerCapture(e.pointerId); } catch (err) {}
     } else feed(p.x < W / 2 ? 'bear' : 'rabbit');
@@ -826,6 +881,11 @@ body {
   $('resumeBtn').addEventListener('click', () => setPaused(false));
   $('menuBtn').addEventListener('click', toMenu);
   ['muteBtn1', 'muteBtn2'].forEach(id => $(id).addEventListener('click', () => { muted = !muted; store.set('kumausa-muted', muted); renderMute(); }));
+  ['bgmBtn1', 'bgmBtn2'].forEach(id => $(id).addEventListener('click', () => {
+    bgmOn = !bgmOn; store.set('kumausa-bgm', bgmOn); renderMute();
+    if (!bgmOn) bgmStop(); else if (playing && !paused) bgmStart();
+  }));
+  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) setPaused(true); });
   addEventListener('blur', () => { if (playing) setPaused(true); });
 
   // ---------------- update ----------------
@@ -845,10 +905,15 @@ body {
     if (paused) return;
 
     const v = speed();
-    beltOffset += v * dt; spawnDist += v * dt;
-    const gap = L.s * 1.7;
-    if (!items.some(i => i.state === 'belt' && i.x > -L.s * .3)) spawnDist = Math.max(spawnDist, gap);
-    if (spawnDist >= gap) { spawnDist -= gap; spawn(-L.s * .7); }
+    beltOffset += v * dt;
+    // keep a fixed gap behind the last item on the belt (items being dragged keep their slot)
+    const gap = L.s * 1.7, spawnX = -L.s * .7;
+    let leftmost = Infinity;
+    for (const i of items) {
+      if (i.state === 'belt') leftmost = Math.min(leftmost, i.x);
+      else if (i.state === 'drag' || i.state === 'return') leftmost = Math.min(leftmost, i.slotX);
+    }
+    if (leftmost - spawnX >= gap) spawn(spawnX);
 
     for (const it of items) {
       if (it.state === 'belt') {
@@ -861,9 +926,13 @@ body {
             loseLife();
           }
         }
+      } else if (it.state === 'drag') {
+        it.slotX += v * dt;
       } else if (it.state === 'return') {
-        it.x += v * dt; it.y += (L.itemY - it.y) * Math.min(1, dt * 14);
-        if (Math.abs(it.y - L.itemY) < 1) { it.y = L.itemY; it.state = 'belt'; }
+        it.slotX += v * dt;
+        const f = Math.min(1, dt * 14);
+        it.x += (it.slotX - it.x) * f; it.y += (L.itemY - it.y) * f;
+        if (Math.abs(it.y - L.itemY) < 1 && Math.abs(it.x - it.slotX) < 1) { it.x = it.slotX; it.y = L.itemY; it.state = 'belt'; }
       } else if (it.state === 'fly') {
         it.t += dt / .38;
         const t = Math.min(1, it.t), e = 1 - Math.pow(1 - t, 2);
