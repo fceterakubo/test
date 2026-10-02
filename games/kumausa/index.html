@@ -575,9 +575,17 @@ body {
     slots = Array.from({ length: L.n }, () => null);
     for (let i = 0; i < L.n; i++) if (i % 3 !== 2) slots[i] = Object.assign(newItem(), { pop: 1 });
   }
+  // The next item to serve, in the order the turntable brings them to the front (right -> front -> left).
+  // An item that has only just slid past the front still counts, so the target never jumps backwards to the left.
   function frontSlot() {
+    const grace = Math.PI / slots.length * .9;
     let best = -1, bd = 1e9;
-    slots.forEach((it, i) => { if (it && it.state === 'ring') { const d = adiff(slotAngle(i), Math.PI / 2); if (d < bd) { bd = d; best = i; } } });
+    slots.forEach((it, i) => {
+      if (!it || it.state !== 'ring') return;
+      const ahead = ((Math.PI / 2 - slotAngle(i)) % TAU + TAU) % TAU;   // how far it still has to travel to the front
+      const key = (ahead + grace) % TAU;
+      if (key < bd) { bd = key; best = i; }
+    });
     return best;
   }
   const count = () => slots.filter(Boolean).length;
@@ -887,17 +895,38 @@ body {
     const list = [{ y: L.tableY - .1 * L.k, vase: true }];
     slots.forEach((it, i) => { if (it && it.state === 'ring') { const q = ringPos(slotAngle(i)); list.push({ it, q, y: q.y }); } });
     list.sort((a, b) => a.y - b.y);
-    const f = playing ? frontSlot() : -1;
+    const f = playing ? frontSlot() : -1, front = f >= 0 ? slots[f] : null;
+    const blink = reduceMotion ? 1 : .5 + .5 * Math.sin(clock * 9);   // 0..1, about 1.4 blinks a second
     for (const o of list) {
       if (o.vase) { drawVase(ctx); continue; }
+      if (o.it === front) continue;   // the item to serve is drawn last, on top
       const sc = o.q.sc * (.4 + .6 * o.it.pop);
-      if (f >= 0 && o.it === slots[f]) E(ctx, o.q.x, o.q.y + .38 * sc, .5 * sc, .16 * sc, 'rgba(255,220,90,.6)');
-      drawFoodAt(o.it.type, o.q.x, o.q.y, sc, 0, 1, false, o.it.gold);
+      drawFoodAt(o.it.type, o.q.x, o.q.y, sc, 0, front ? .55 : 1, false, o.it.gold);   // dim the others
     }
-    if (f >= 0) {
-      const q = ringPos(slotAngle(f)), ay = q.y - .95 * q.sc - Math.abs(Math.sin(clock * 5)) * .12 * q.sc;
-      ctx.beginPath(); ctx.moveTo(q.x - .14 * q.sc, ay - .14 * q.sc); ctx.lineTo(q.x + .14 * q.sc, ay - .14 * q.sc); ctx.lineTo(q.x, ay + .02 * q.sc); ctx.closePath();
-      ctx.lineWidth = 3; ctx.strokeStyle = '#FFFFFF'; ctx.lineJoin = 'round'; ctx.stroke(); ctx.fillStyle = '#FFD54A'; ctx.fill();
+    if (front) {
+      const q = ringPos(slotAngle(f)), sc = q.sc * (.4 + .6 * front.pop);
+      const bounce = reduceMotion ? 0 : Math.abs(Math.sin(clock * 6)) * .08 * sc;
+      const gy = q.y + .42 * sc;
+      // blinking spotlight under the item
+      E(ctx, q.x, gy, .9 * sc, .3 * sc, rad(ctx, q.x, gy, 0, q.x, gy, .9 * sc, [`rgba(255,240,140,${.35 + .45 * blink})`, 'rgba(255,220,80,0)']));
+      ctx.save(); ctx.beginPath(); ctx.ellipse(q.x, gy, .62 * sc, .2 * sc, 0, 0, TAU);
+      ctx.lineWidth = Math.max(3, .07 * sc); ctx.strokeStyle = `rgba(255,190,30,${.45 + .55 * blink})`; ctx.stroke();
+      ctx.lineWidth = Math.max(1.5, .03 * sc); ctx.strokeStyle = `rgba(255,255,255,${.5 + .5 * blink})`; ctx.stroke(); ctx.restore();
+      // white glow behind the food that pulses with the blink
+      ctx.save(); ctx.shadowColor = `rgba(255,236,120,${.5 + .5 * blink})`; ctx.shadowBlur = 18 + 14 * blink;
+      drawFoodAt(front.type, q.x, q.y - bounce, sc * 1.18, 0, 1, false, front.gold);
+      ctx.restore();
+      // bigger arrow with a "つぎ！" tag
+      const S = sc * 1.18, im = SPR[front.type], fh = ok(im) ? im.naturalHeight * S * 1.3 / FOOD_W : S;
+      const top = q.y - bounce + .45 * S - fh, as = Math.max(14, .26 * sc), ay = top - as * .2 - (reduceMotion ? 0 : Math.abs(Math.sin(clock * 6)) * as * .5);
+      ctx.beginPath(); ctx.moveTo(q.x - as * .6, ay - as * .7); ctx.lineTo(q.x + as * .6, ay - as * .7); ctx.lineTo(q.x, ay + as * .1); ctx.closePath();
+      ctx.lineWidth = 4; ctx.strokeStyle = '#FFFFFF'; ctx.lineJoin = 'round'; ctx.stroke(); ctx.fillStyle = '#FFB300'; ctx.fill();
+      const fs = clamp(as * .85, 12, 20), ty = ay - as * .7 - fs * .9;
+      ctx.font = `800 ${fs}px "M PLUS Rounded 1c", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const tw = ctx.measureText('つぎ！').width + fs;
+      RR(ctx, q.x - tw / 2, ty - fs * .75, tw, fs * 1.5, fs * .75); ctx.fillStyle = `rgba(255,${150 + 60 * blink},40,1)`; ctx.fill();
+      ctx.lineWidth = 2.5; ctx.strokeStyle = '#FFFFFF'; ctx.stroke();
+      ctx.fillStyle = '#FFFFFF'; ctx.fillText('つぎ！', q.x, ty + 1);
     }
     for (const it of fx) drawFoodAt(it.type, it.x, it.y, it.sc, it.rot, it.a, false, it.gold);
     slots.forEach(it => { if (it && (it.state === 'drag' || it.state === 'return')) drawFoodAt(it.type, it.x, it.y, L.s * (it.state === 'drag' ? 1.1 : 1), 0, 1, it.state === 'drag', it.gold); });
