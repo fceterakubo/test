@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>ぴょんぴょんなわとび</title>
+<style>
+  :root { --bg:#fff6e0; --ink:#3a2a1a; --accent:#ff7a59; --sub:#7a6a5a; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font-family:"Hiragino Maru Gothic ProN","M PLUS Rounded 1c","Yu Gothic",system-ui,sans-serif;
+    overflow:hidden; touch-action:manipulation; user-select:none; -webkit-user-select:none; }
+  canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  .overlay { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:14px; background:rgba(255,246,224,.95); text-align:center; padding:16px; box-sizing:border-box; }
+  .hidden { display:none; }
+  h1 { margin:0; font-size:clamp(28px,7vw,48px); letter-spacing:.05em; }
+  h2 { margin:0; font-size:clamp(32px,9vw,64px); }
+  p { margin:0; line-height:1.7; }
+  .how { max-width:520px; font-size:15px; color:var(--sub); }
+  .how b { color:var(--ink); }
+  button { font:inherit; font-size:20px; padding:12px 32px; border-radius:999px; border:3px solid var(--ink);
+    background:var(--accent); color:#fff; cursor:pointer; }
+  button.sub { background:#fff; color:var(--ink); font-size:16px; padding:8px 22px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; }
+  .offset { font-size:13px; color:var(--sub); display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .offset input { width:240px; }
+  table { border-collapse:collapse; font-size:16px; }
+  td { padding:2px 12px; }
+  td:last-child { text-align:right; font-weight:bold; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="title" class="overlay">
+  <h1>ぴょんぴょん なわとび</h1>
+  <p class="how">
+    なわが<b>地面に当たる瞬間</b>にジャンプ！<br>
+    操作：<b>画面タップ</b> または <b>スペースキー</b><br>
+    目で追うより、<b>音を聞いてノる</b>のがコツ。<br>
+    「ゆっくり〜」の合図 → なわが1回だけゆっくり回る<br>
+    「タタッ！」の合図 → 2回すばやく跳ぶ
+  </p>
+  <div class="row"><button id="startBtn">はじめる</button></div>
+  <label class="offset">
+    <span>タイミング補正：<span id="offVal">0</span> ms（入力がいつも遅れると判定される場合は＋側へ）</span>
+    <input id="offset" type="range" min="-100" max="150" step="5" value="0">
+  </label>
+  <p class="how" id="best"></p>
+</div>
+
+<div id="result" class="overlay hidden">
+  <h2 id="rank"></h2>
+  <p id="comment"></p>
+  <table id="detail"></table>
+  <div class="row">
+    <button id="retryBtn">もういちど</button>
+    <button id="backBtn" class="sub">タイトルへ</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- 設定 ----------
+const BPM = 120;
+const BEAT = 60 / BPM;
+const WIN = { just: 0.045, ok: 0.09, barely: 0.15 }; // 判定幅（秒）
+const W = 800, H = 450, GROUND = 380;
+
+// 譜面：前のジャンプから次のジャンプまでの拍数（1=通常, 2=ゆっくり, 0.5=すばやく）
+const BAR = {
+  A:  [1, 1, 1, 1],
+  M:  [2, 1, 1],
+  S:  [2, 2],
+  F:  [1, 1, 0.5, 0.5, 1],
+  F2: [0.5, 0.5, 1, 0.5, 0.5, 1],
+};
+const SONG = ["A","A","A","A", "M","A","M","A", "F","A","F","A",
+              "S","A","M","F", "F2","A","F2","M", "F","F2","S","A", "A"];
+const CHART = SONG.flatMap(k => BAR[k]);
+
+// ---------- オーディオ ----------
+const A = { ctx: null, noise: null };
+
+function ensureAudio() {
+  if (!A.ctx) {
+    A.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: "interactive" });
+    const len = A.ctx.sampleRate;
+    A.noise = A.ctx.createBuffer(1, len, A.ctx.sampleRate);
+    const d = A.noise.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  }
+  if (A.ctx.state === "suspended") A.ctx.resume();
+}
+
+function latency() {
+  const c = A.ctx;
+  return c.outputLatency || c.baseLatency || 0;
+}
+
+function env(g, t, a, peak, d) {
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + a);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
+}
+
+function tone(dest, t, freq, type, dur, vol, a = 0.005) {
+  const c = A.ctx, o = c.createOscillator(), g = c.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  env(g, t, a, vol, dur);
+  o.connect(g).connect(dest);
+  o.start(t); o.stop(t + a + dur + 0.05);
+  return o;
+}
+
+function noise(dest, t, dur, vol, ftype, freq, q = 1) {
+  const c = A.ctx, s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+  s.buffer = A.noise;
+  f.type = ftype; f.frequency.value = freq; f.Q.value = q;
+  env(g, t, 0.002, vol, dur);
+  s.connect(f).connect(g).connect(dest);
+  s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.05);
+}
+
+const midi = n => 440 * Math.pow(2, (n - 69) / 12);
+
+const SND = {
+  kick(d, t) {
+    const c = A.ctx, o = c.createOscillator(), g = c.createGain();
+    o.frequency.setValueAtTime(150, t);
+    o.frequency.exponentialRampToValueAtTime(40, t + 0.15);
+    env(g, t, 0.002, 0.9, 0.25);
+    o.connect(g).connect(d); o.start(t); o.stop(t + 0.35);
+  },
+  snare(d, t) { noise(d, t, 0.15, 0.45, "bandpass", 1800, 0.8); tone(d, t, 190, "triangle", 0.08, 0.25); },
+  hat(d, t, v = 0.15) { noise(d, t, 0.04, v, "highpass", 8000); },
+  crash(d, t) { noise(d, t, 1.4, 0.35, "highpass", 5000); },
+  block(d, t, hi) { tone(d, t, hi ? 1600 : 1100, "sine", 0.07, 0.6); },
+  cueSlow(d, t) { tone(d, t, midi(67), "triangle", 0.18, 0.7); tone(d, t + 0.2, midi(60), "triangle", 0.45, 0.7); },
+  cueFast(d, t) { tone(d, t, 1250, "square", 0.05, 0.25); tone(d, t + BEAT / 2, 1250, "square", 0.05, 0.25); },
+  jump(d, t, grade) {
+    // 成功音：なわの「パシッ」＋ジャンプの「ぴょん」
+    noise(d, t, 0.05, 0.5, "bandpass", 3000, 2);
+    const o = tone(d, t, 500, "square", 0.12, grade === "just" ? 0.18 : 0.12);
+    o.frequency.exponentialRampToValueAtTime(grade === "barely" ? 700 : 1100, t + 0.1);
+  },
+  miss(d, t) {
+    const o = tone(d, t, 220, "sawtooth", 0.3, 0.25);
+    o.frequency.exponentialRampToValueAtTime(70, t + 0.3);
+    noise(d, t, 0.12, 0.5, "lowpass", 400);
+  },
+  whiff(d, t) { noise(d, t, 0.08, 0.15, "bandpass", 1200, 3); },
+};
+
+// 伴奏（C - Am - F - G）
+const ROOTS = [0, 9, 5, 7];
+const MELODY = [
+  [12, null, 16, 19, 16, null, 14, 12],
+  [9, null, 12, 16, 14, 12, 9, null],
+  [9, 12, 14, null, 12, 9, 7, null],
+  [7, null, 11, 14, 12, 11, 7, null],
+];
+
+function scheduleSong(g) {
+  const { music, sfx, t0, endBeat } = g;
+  const bt = b => t0 + b * BEAT;
+
+  // カウントイン
+  for (let b = 0; b < 4; b++) SND.block(sfx, bt(b), b === 3);
+
+  for (let b = 0; b < endBeat; b++) {
+    const inBar = b % 4, bar = Math.floor(b / 4);
+    SND.hat(music, bt(b), 0.18); SND.hat(music, bt(b + 0.5), 0.08);
+    if (b < 4) continue;
+    if (inBar === 0 || inBar === 2) SND.kick(music, bt(b));
+    if (inBar === 1 || inBar === 3) SND.snare(music, bt(b));
+    const root = ROOTS[bar % 4];
+    for (let e = 0; e < 2; e++) {
+      const n = 36 + root + (e === 1 && inBar % 2 === 1 ? 12 : 0);
+      tone(music, bt(b + e / 2), midi(n), "triangle", 0.22, 0.45);
+      const m = MELODY[bar % 4][inBar * 2 + e];
+      if (m !== null) tone(music, bt(b + e / 2), midi(60 + m), "square", 0.18, 0.08);
+    }
+  }
+  // しめ
+  const tEnd = bt(endBeat);
+  SND.kick(music, tEnd); SND.crash(music, tEnd);
+  for (const n of [48, 60, 64, 67, 72]) tone(music, tEnd, midi(n), "triangle", 1.2, 0.18);
+
+  // 合図
+  for (const c of g.cues) (c.type === "slow" ? SND.cueSlow : SND.cueFast)(sfx, c.t);
+}
+
+// ---------- ゲーム状態 ----------
+let G = null;
+let offsetMs = 0;
+try { offsetMs = Number(localStorage.getItem("nawa.offset")) || 0; } catch (e) {}
+
+function buildGame() {
+  const c = A.ctx;
+  const bus = c.createGain(); bus.gain.value = 0.9; bus.connect(c.destination);
+  const music = c.createGain(); music.gain.value = 0.5; music.connect(bus);
+  const sfx = c.createGain(); sfx.gain.value = 1; sfx.connect(bus);
+  const t0 = c.currentTime + 0.4;
+
+  const hits = [];
+  let b = 3; // 最初のジャンプは4拍目（カウントイン直後）
+  for (const iv of CHART) { b += iv; hits.push({ beat: b, t: t0 + b * BEAT, iv, j: null }); }
+
+  const cues = [];
+  hits.forEach((h, i) => {
+    const prevIv = i > 0 ? hits[i - 1].iv : 1;
+    if (h.iv !== 1 && h.iv !== prevIv) {
+      cues.push({ t: t0 + (h.beat - h.iv - 1) * BEAT, type: h.iv > 1 ? "slow" : "fast" });
+    }
+  });
+
+  const lastBeat = hits[hits.length - 1].beat;
+  const endBeat = Math.ceil((lastBeat + 1) / 4) * 4;
+  return {
+    bus, music, sfx, t0, hits, cues, endBeat,
+    tEnd: t0 + (endBeat + 3) * BEAT,
+    player: { jumpAt: -9, kind: null, tripAt: -9, fx: [] },
+    empty: 0, over: false,
+  };
+}
+
+function startGame() {
+  ensureAudio();
+  if (G) G.bus.disconnect();
+  G = buildGame();
+  scheduleSong(G);
+  hide("title"); hide("result");
+}
+
+function endGame() {
+  G.over = true;
+  const n = G.hits.length;
+  const cnt = { just: 0, ok: 0, barely: 0, miss: 0 };
+  for (const h of G.hits) cnt[h.j || "miss"]++;
+  const raw = (cnt.just + cnt.ok * 0.8 + cnt.barely * 0.5) / n * 100 - G.empty;
+  const score = Math.max(0, Math.round(raw));
+  const [rank, comment] =
+    score >= 90 ? ["かんぺき！", "なわとび名人。もう縄が止まって見える。"] :
+    score >= 75 ? ["いいかんじ", "リズムに乗れてる。合図のところを詰めれば上へ。"] :
+    score >= 55 ? ["まあまあ", "跳べてはいる。画面より音に集中してみよう。"] :
+                  ["もういっかい", "目で追うと間に合わない。耳で跳ぼう。"];
+  $("rank").textContent = rank;
+  $("comment").textContent = `スコア ${score} 点 ― ${comment}`;
+  $("detail").innerHTML = [
+    ["ジャスト", cnt.just], ["OK", cnt.ok], ["ぎりぎり", cnt.barely],
+    ["ミス", cnt.miss], ["からぶり", G.empty],
+  ].map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+  try {
+    const best = Number(localStorage.getItem("nawa.best")) || 0;
+    if (score > best) localStorage.setItem("nawa.best", String(score));
+  } catch (e) {}
+  showBest();
+  show("result");
+}
+
+function press() {
+  if (!G || G.over) return;
+  const now = A.ctx.currentTime;
+  const tIn = now - latency() - offsetMs / 1000;
+  let best = null, bd = 9;
+  for (const h of G.hits) {
+    if (h.t - tIn > WIN.barely) break;
+    if (h.j) continue;
+    const d = tIn - h.t;
+    if (Math.abs(d) <= WIN.barely && Math.abs(d) < Math.abs(bd)) { best = h; bd = d; }
+  }
+  const p = G.player, tv = now - latency();
+  if (best) {
+    const ad = Math.abs(bd);
+    best.j = ad <= WIN.just ? "just" : ad <= WIN.ok ? "ok" : "barely";
+    SND.jump(G.sfx, now, best.j);
+    p.jumpAt = tv; p.kind = best.j;
+    if (best.j === "just") p.fx.push({ t: tv, type: "star" });
+    if (best.j === "barely") p.fx.push({ t: tv, type: "sweat" });
+  } else {
+    G.empty++;
+    SND.whiff(G.sfx, now);
+    p.jumpAt = tv; p.kind = "whiff";
+  }
+}
+
+function update() {
+  if (!G || G.over) return;
+  const now = A.ctx.currentTime;
+  const tIn = now - latency() - offsetMs / 1000;
+  for (const h of G.hits) {
+    if (h.t - tIn > 0) break;
+    if (!h.j && tIn - h.t > WIN.barely) {
+      h.j = "miss";
+      SND.miss(G.sfx, now);
+      G.player.tripAt = h.t;
+    }
+  }
+  if (now > G.tEnd) endGame();
+}
+
+// ---------- 描画 ----------
+const cv = document.getElementById("cv");
+const cx = cv.getContext("2d");
+let view = { s: 1, ox: 0, oy: 0 };
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  const s = Math.min(innerWidth / W, innerHeight / H);
+  view = { s: s * dpr, ox: (innerWidth - W * s) / 2 * dpr, oy: (innerHeight - H * s) / 2 * dpr };
+}
+addEventListener("resize", resize);
+resize();
+
+function ropePhase(tv) {
+  if (!G) return 0.5;
+  const hs = G.hits;
+  let prev = hs[0].t - hs[0].iv * BEAT;
+  if (tv < prev + 0.5 * (hs[0].t - prev)) return 0.5;
+  for (const h of hs) {
+    if (tv < h.t) return (tv - prev) / (h.t - prev);
+    prev = h.t;
+  }
+  const p = (tv - prev) / BEAT;
+  return p < 0.5 ? p : 0.5;
+}
+
+function cueBubble(tv) {
+  if (!G) return null;
+  for (const c of G.cues) if (tv >= c.t && tv < c.t + 0.9) return c.type;
+  return null;
+}
+
+function bean(x, y, w, h, color, flip, phase) {
+  // 縄を回す人
+  cx.fillStyle = color;
+  cx.beginPath(); cx.roundRect(x - w / 2, y - h, w, h, w / 2); cx.fill();
+  cx.fillStyle = "#3a2a1a";
+  cx.beginPath(); cx.arc(x - 9 * flip + 6 * flip, y - h + 32, 4, 0, 7); cx.fill();
+  cx.beginPath(); cx.arc(x + 9 * flip + 6 * flip, y - h + 32, 4, 0, 7); cx.fill();
+  cx.fillRect(x - 6 + 6 * flip, y - h + 46, 12, 3);
+  const a = phase * Math.PI * 2;
+  const hand = { x: x + 50 * flip + Math.sin(a) * 10 * flip, y: 232 + Math.cos(a) * 12 };
+  cx.strokeStyle = color; cx.lineWidth = 10; cx.lineCap = "round";
+  cx.beginPath(); cx.moveTo(x + 15 * flip, y - h + 80); cx.lineTo(hand.x, hand.y); cx.stroke();
+  return hand;
+}
+
+function drawRope(l, r, phase, front) {
+  const cy = 287.5 + 357.5 * Math.cos(phase * Math.PI * 2);
+  cx.strokeStyle = "#7a3e1c"; cx.lineWidth = front ? 5 : 3;
+  cx.beginPath(); cx.moveTo(l.x, l.y); cx.quadraticCurveTo(400, cy, r.x, r.y); cx.stroke();
+}
+
+function drawPlayer(tv) {
+  const p = G ? G.player : { jumpAt: -9, kind: null, tripAt: -9, fx: [] };
+  let lift = 0, tilt = 0;
+  const dur = p.kind === "whiff" ? 0.25 : 0.38;
+  const k = (tv - p.jumpAt) / dur;
+  if (k >= 0 && k <= 1) lift = (p.kind === "whiff" ? 45 : 110) * Math.sin(Math.PI * k);
+  const tk = (tv - p.tripAt) / 0.6;
+  const tripping = tk >= 0 && tk <= 1;
+  if (tripping) { tilt = Math.sin(tk * Math.PI) * 0.6; lift = 0; }
+
+  // 影
+  cx.fillStyle = "rgba(0,0,0,.15)";
+  cx.beginPath(); cx.ellipse(400, GROUND + 4, 34 - lift * 0.12, 8, 0, 0, 7); cx.fill();
+
+  cx.save();
+  cx.translate(400, GROUND - lift);
+  cx.rotate(tilt);
+  cx.strokeStyle = "#3a2a1a"; cx.lineWidth = 6; cx.lineCap = "round";
+  const spread = lift > 10 ? 14 : 8;
+  cx.beginPath(); cx.moveTo(-10, -24); cx.lineTo(-spread, 0); cx.moveTo(10, -24); cx.lineTo(spread, 0); cx.stroke();
+  cx.fillStyle = "#ffcc4d";
+  cx.beginPath(); cx.ellipse(0, -58, 32, 38, 0, 0, 7); cx.fill();
+  cx.fillStyle = "#3a2a1a";
+  if (tripping) {
+    cx.font = "bold 18px sans-serif"; cx.textAlign = "center";
+    cx.fillText("× ×", 0, -60);
+  } else {
+    cx.beginPath(); cx.arc(-11, -64, 4.5, 0, 7); cx.arc(11, -64, 4.5, 0, 7); cx.fill();
+    cx.beginPath();
+    if (lift > 10) cx.arc(0, -48, 7, 0, Math.PI); else cx.rect(-6, -48, 12, 3);
+    cx.fill();
+  }
+  cx.fillStyle = "rgba(255,120,120,.5)";
+  cx.beginPath(); cx.arc(-21, -52, 5, 0, 7); cx.arc(21, -52, 5, 0, 7); cx.fill();
+  cx.restore();
+
+  if (tripping) {
+    cx.fillStyle = "#3a2a1a"; cx.font = "bold 22px sans-serif"; cx.textAlign = "center";
+    cx.fillText("いてっ", 400, GROUND - 120);
+  }
+  // エフェクト
+  p.fx = p.fx.filter(f => tv - f.t < 0.5);
+  for (const f of p.fx) {
+    const e = (tv - f.t) / 0.5;
+    cx.globalAlpha = 1 - e;
+    if (f.type === "star") {
+      cx.fillStyle = "#ffb300";
+      for (const dx of [-40, 40]) star(400 + dx * (1 + e), GROUND - 20 - 30 * e, 8);
+    } else {
+      cx.fillStyle = "#4aa3df";
+      cx.beginPath(); cx.arc(440, GROUND - 110 + 20 * e, 6, 0, 7); cx.fill();
+    }
+    cx.globalAlpha = 1;
+  }
+}
+
+function star(x, y, r) {
+  cx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r;
+    cx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  cx.fill();
+}
+
+function bubble(x, y, text) {
+  cx.font = "bold 22px sans-serif"; cx.textAlign = "center";
+  const w = cx.measureText(text).width + 28;
+  cx.fillStyle = "#fff"; cx.strokeStyle = "#3a2a1a"; cx.lineWidth = 3;
+  cx.beginPath(); cx.roundRect(x - w / 2, y - 22, w, 40, 14); cx.fill(); cx.stroke();
+  cx.fillStyle = "#3a2a1a"; cx.fillText(text, x, y + 6);
+}
+
+function draw() {
+  update();
+  const tv = A.ctx ? A.ctx.currentTime - latency() : 0;
+  cx.setTransform(1, 0, 0, 1, 0, 0);
+  cx.fillStyle = "#fff6e0"; cx.fillRect(0, 0, cv.width, cv.height);
+  cx.setTransform(view.s, 0, 0, view.s, view.ox, view.oy);
+
+  const sky = cx.createLinearGradient(0, 0, 0, GROUND);
+  sky.addColorStop(0, "#ffe2a8"); sky.addColorStop(1, "#fff6e0");
+  cx.fillStyle = sky; cx.fillRect(0, 0, W, GROUND);
+  cx.fillStyle = "#ffd36b"; cx.beginPath(); cx.arc(680, 80, 40, 0, 7); cx.fill();
+  cx.fillStyle = "#8fd16a"; cx.fillRect(0, GROUND, W, H - GROUND);
+
+  const phase = ropePhase(tv);
+  const back = Math.cos(phase * Math.PI * 2) < 0;
+  const l = bean(120, GROUND, 64, 160, "#5aa9e6", 1, phase);
+  const r = bean(680, GROUND, 64, 160, "#f28ab2", -1, phase);
+
+  if (back) drawRope(l, r, phase, false);
+  drawPlayer(tv);
+  if (!back) drawRope(l, r, phase, true);
+
+  const cue = cueBubble(tv);
+  if (cue === "slow") bubble(140, 170, "ゆっくり〜");
+  if (cue === "fast") bubble(660, 170, "タタッ！");
+
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+// ---------- UI ----------
+function $(id) { return document.getElementById(id); }
+function show(id) { $(id).classList.remove("hidden"); }
+function hide(id) { $(id).classList.add("hidden"); }
+function showBest() {
+  let best = 0;
+  try { best = Number(localStorage.getItem("nawa.best")) || 0; } catch (e) {}
+  $("best").textContent = best ? `ベストスコア：${best} 点` : "";
+}
+
+$("offset").value = offsetMs;
+$("offVal").textContent = offsetMs;
+$("offset").addEventListener("input", e => {
+  offsetMs = Number(e.target.value);
+  $("offVal").textContent = offsetMs;
+  try { localStorage.setItem("nawa.offset", String(offsetMs)); } catch (e2) {}
+});
+$("startBtn").addEventListener("click", startGame);
+$("retryBtn").addEventListener("click", startGame);
+$("backBtn").addEventListener("click", () => { hide("result"); show("title"); });
+showBest();
+
+addEventListener("keydown", e => {
+  if (e.repeat) return;
+  if (["Space", "Enter", "ArrowUp", "KeyZ", "KeyX"].includes(e.code)) {
+    if (G && !G.over) { e.preventDefault(); press(); }
+  }
+});
+addEventListener("pointerdown", e => {
+  if (e.target.closest("button, input, label")) return;
+  if (G && !G.over) { e.preventDefault(); press(); }
+});
+</script>
+</body>
+</html>
