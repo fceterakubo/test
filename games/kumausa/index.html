@@ -442,13 +442,6 @@ body {
       const a = spin + j * TAU / 20;
       E(c, cx + Math.cos(a) * drx * .9, cy + dy + Math.sin(a) * dry * .9, .05 * k, .035 * k, j % 2 ? '#FFC2D6' : '#BFE3FF');
     }
-    // place mats in front of each animal
-    for (const key in animals) {
-      const an = animals[key], col = BOX[an.kind], mx = an.matX;
-      const my = L.matY, ms = L.s;
-      E(c, mx, my, .58 * ms, .32 * ms, col.rimLo); E(c, mx, my - .02 * ms, .54 * ms, .29 * ms, '#FFFFFF');
-      c.globalAlpha = .55; drawFoodIcon(c, an.food, mx, my - .05 * ms, .62 * ms); c.globalAlpha = 1;
-    }
   }
   function drawVase(c) {
     const k = L.k, x = L.cx, y = L.tableY - .1 * k;
@@ -624,7 +617,7 @@ body {
     slots[i] = null;
     fx.push({ type: it.type, state: 'slide', who, t: 0,
       fx: it.state === 'ring' ? p.x : it.x, fy: it.state === 'ring' ? p.y : it.y,
-      tx: an.matX, ty: L.matY - .38 * L.s, x: p.x, y: p.y, sc: p.sc, sc0: it.state === 'drag' ? L.s * 1.1 : p.sc, rot: 0, a: 1 });
+      tx: mouthPos(an).x, ty: mouthPos(an).y, x: p.x, y: p.y, sc: p.sc, sc0: it.state === 'drag' ? L.s * 1.1 : p.sc, rot: 0, a: 1 });
     sfxSlide();
   }
   function feed(who) { if (!playing || paused) return; const f = frontSlot(); if (f >= 0) sendSlot(f, who); }
@@ -777,11 +770,12 @@ body {
     });
     for (const it of fx) {
       if (it.state === 'slide') {
-        it.t += dt / .34;
+        it.t += dt / .38;
         const t = Math.min(1, it.t), e = 1 - Math.pow(1 - t, 3);
-        it.x = it.fx + (it.tx - it.fx) * e; it.y = it.fy + (it.ty - it.fy) * e;
-        it.sc = it.sc0 + (L.s * .95 - it.sc0) * e;
-        it.rot = Math.sin(t * Math.PI * 3) * .12 * (1 - t);
+        it.x = it.fx + (it.tx - it.fx) * e;
+        it.y = it.fy + (it.ty - it.fy) * e - Math.sin(t * Math.PI) * L.k * .45;   // little hop up to the mouth
+        it.sc = it.sc0 + (L.s * .8 - it.sc0) * e;
+        it.rot = Math.sin(t * Math.PI * 2) * .15 * (1 - t);
         if (t >= 1) arrive(it);
       } else if (it.state === 'reject') {
         it.vy += L.k * 16 * dt; it.x += it.vx * dt; it.y += it.vy * dt; it.rot += dt * 5; it.a -= dt * 1.4;
@@ -810,6 +804,9 @@ body {
     const w = im.naturalWidth * sc, h = im.naturalHeight * sc * (1 + breathe + chew);
     ctx.drawImage(im, an.x + shake - w * ANCHOR[key], L.baseY - hop - h, w, h);
   }
+  // mouth position inside each idle sprite, measured from the sprite's bottom-centre anchor (source pixels)
+  const MOUTH = { bear: { dx: -20, up: 115 }, rabbit: { dx: 8, up: 80 } };
+  function mouthPos(an) { const m = MOUTH[an.kind]; return { x: an.x + m.dx * L.sprScale, y: L.baseY - m.up * L.sprScale }; }
   function animalTop(an) { const im = SPR[spriteFor(an)]; return L.baseY - (ok(im) ? im.naturalHeight : 360) * L.sprScale; }
   function draw() {
     ctx.drawImage(bgc, 0, 0, W, H);
