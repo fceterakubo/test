@@ -41,6 +41,16 @@ body {
 .score-pill svg { width: 34px; height: 34px; flex: none; filter: drop-shadow(0 2px 0 rgba(150, 90, 0, .35)); }
 .score-pill .lbl { display: block; font: 800 11px/1 var(--display); letter-spacing: .12em; opacity: .95; }
 .score-pill b { display: block; font: 800 28px/1.05 var(--display); font-variant-numeric: tabular-nums; text-shadow: 0 2px 0 #1C5FB0; min-width: 1.4em; }
+.fever-chip {
+  position: relative; overflow: hidden; font: 800 14px/1 var(--display); color: #fff; border: 2px solid var(--white);
+  border-radius: 999px; padding: 6px 12px 8px; min-width: 9.5em; text-align: center;
+  background: linear-gradient(90deg, #FF6FA0, #FFB347, #FFD54A, #7ED957, #5DB8FF, #B385F2); background-size: 200% 100%;
+  box-shadow: 0 3px 0 #D9468A; animation: rainbow 1.2s linear infinite; text-shadow: 0 1px 0 rgba(0, 0, 0, .25);
+}
+.fever-chip i { position: absolute; left: 0; bottom: 0; height: 3px; background: #fff; border-radius: 3px; }
+@keyframes rainbow { to { background-position: 200% 0; } }
+@media (prefers-reduced-motion: reduce) { .fever-chip { animation: none; } }
+.stats { font: 700 13px var(--body); color: #7A5A46; margin: -8px 0 14px; }
 .combo-chip {
   font: 800 13px/1 var(--display); color: var(--brown); background: var(--yellow); border: 2px solid var(--white);
   border-radius: 999px; padding: 5px 10px; box-shadow: 0 3px 0 #E0A800;
@@ -137,6 +147,7 @@ body {
         <div><span class="lbl">スコア</span><b id="score">0</b></div>
       </div>
       <div class="combo-chip" id="combo" hidden></div>
+      <div class="fever-chip" id="feverChip" hidden>フィーバー ×2<i id="feverBar"></i></div>
     </div>
     <div class="title-banner" aria-hidden="true">
       <div class="l1"><span class="o">パンケーキ</span> と <span class="p">ミルクシェーキ</span> を</div>
@@ -163,7 +174,7 @@ body {
         <li class="bear"><canvas data-icon="pancake" width="104" height="104"></canvas><span class="arrow">→</span><canvas data-icon="bear" width="104" height="104"></canvas><span>パンケーキは<br><b>くまちゃん</b></span></li>
         <li class="rabbit"><canvas data-icon="shake" width="104" height="104"></canvas><span class="arrow">→</span><canvas data-icon="rabbit" width="104" height="104"></canvas><span>ミルクシェーキは<br><b>うさぎちゃん</b></span></li>
       </ul>
-      <p class="how">まるいテーブルが くるくる まわるよ。<br>てまえの たべものを 左／右 タップ で すべらせて とどけよう。<br>ドラッグ でも ← → キー でも OK。</p>
+      <p class="how">10コンボで <b>フィーバータイム</b>（5びょう・てんすう2ばい）！ キラキラの <b>ゴールデン</b> は 3ばい。<br>まるいテーブルが くるくる まわるよ。<br>てまえの たべものを 左／右 タップ で すべらせて とどけよう。<br>ドラッグ でも ← → キー でも OK。</p>
       <div class="btns">
         <button class="btn green" id="zenBtn" type="button"><span class="tri"></span>スタート <small>のんびり・ずっとあそべる</small></button>
         <button class="btn orange" id="chBtn" type="button">チャレンジ <small>ライフ3つ</small></button>
@@ -187,7 +198,8 @@ body {
   <div class="overlay" id="overOv" hidden>
     <div class="card">
       <h2>おなかいっぱい！</h2>
-      <p class="result"><b id="finalScore">0</b> こ とどけたよ</p>
+      <p class="result"><b id="finalScore">0</b> てん！</p>
+      <p class="stats" id="overStats"></p>
       <p class="best-line" id="overBest"></p>
       <div class="btns">
         <button class="btn orange" id="againBtn" type="button">もういちど</button>
@@ -253,7 +265,7 @@ body {
   const sprReady = Promise.all(Object.entries(SPR_SRC).map(([k, src]) => new Promise(res => {
     const im = new Image(); im.onload = im.onerror = () => res(); im.src = src; SPR[k] = im;
   })));
-  const ok = im => im && im.complete && im.naturalWidth > 0;
+  const ok = im => im && (im.complete || im.getContext) && im.naturalWidth > 0;
   const FOOD_W = 393;
   // food sits with its base at y + .45 * s; both foods share one scale so their sizes stay true to the art
   function drawFood(c, type, x, y, s) {
@@ -267,6 +279,20 @@ body {
     c.drawImage(im, x - w / 2, y - h / 2, w, h);
   }
   const drawFoodIcon = (c, type, x, y, s) => drawFit(c, SPR[type], x, y, s);
+  // golden versions of the food sprites for the rare bonus items
+  function makeGoldSprites() {
+    for (const k of ['pancake', 'shake']) {
+      const im = SPR[k]; if (!ok(im)) continue;
+      const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
+      const g = c.getContext('2d'); g.drawImage(im, 0, 0);
+      g.globalCompositeOperation = 'source-atop';
+      const gr = g.createLinearGradient(0, 0, c.width, c.height);
+      gr.addColorStop(0, 'rgba(255,236,120,.55)'); gr.addColorStop(.5, 'rgba(255,190,40,.42)'); gr.addColorStop(1, 'rgba(255,236,120,.55)');
+      g.fillStyle = gr; g.fillRect(0, 0, c.width, c.height);
+      c.naturalWidth = c.width; c.naturalHeight = c.height;
+      SPR[k + '_gold'] = c;
+    }
+  }
 
   const BOX = {
     bear:   { hi: '#8FD0FF', lo: '#3A8EE6', rim: '#C2E6FF', rimLo: '#68B2F2', inside: '#2C6DB5', edge: '#2669B8', paw: '#B87A44', pad: '#F2C9A5', pawEdge: '#8A552C', shoulder: '#C68B55' },
@@ -289,6 +315,8 @@ body {
   let W = 0, H = 0, L = {}, dpr = 1;
   let slots = [], fx = [], parts = [], pops = [];
   let mode = 'zen', playing = false, paused = false, score = 0, combo = 0, lives = 3;
+  let eaten = 0, maxCombo = 0, fever = 0;   // fever = seconds of bonus time left
+  const FEVER_EVERY = 10, FEVER_TIME = 5;
   let muted = store.get('kumausa-muted', false);
   let bgmOn = store.get('kumausa-bgm', true);
   let spin = 0, spawnT = 0, lastT = 0, clock = 0, drag = null;
@@ -496,7 +524,7 @@ body {
     src.connect(f).connect(g).connect(bgm.gain); src.start(t); src.stop(t + .06);
   }
   function bgmSchedule() {
-    const eighth = 60 / (mode === 'challenge' ? 124 : 112) / 2;
+    const eighth = 60 / ((mode === 'challenge' ? 124 : 112) * (fever > 0 ? 1.25 : 1)) / 2;
     while (bgm.next < ac.currentTime + .15) {
       const t = bgm.next, i = bgm.step % 64, bar = Math.floor(i / 8), beat = i % 8, ch = CHORDS[bar];
       const m = MELODY[i];
@@ -504,6 +532,7 @@ body {
       if (beat === 0 || beat === 4) bgmVoice(NOTE(ch[0]), t, eighth * 3, 'sine', .3, bgm.gain);
       if (beat === 2 || beat === 6) ch.slice(1).forEach(n => bgmVoice(NOTE(n), t, .16, 'triangle', .06, bgm.gain));
       bgmShaker(t, beat % 2 ? .05 : .09);
+      if (fever > 0 && m) bgmVoice(NOTE(m) * 4, t, .12, 'sine', .04, bgm.gain);
       bgm.step++; bgm.next += eighth;
     }
   }
@@ -541,7 +570,7 @@ body {
     const d = (Math.sin(a) + 1) / 2, sc = L.s * (.8 + .2 * d);
     return { x: L.cx + Math.cos(a) * L.rx * L.ringR, y: L.tableY - .04 * L.k + Math.sin(a) * L.ry * L.ringR - .3 * sc, sc, d };
   }
-  const newItem = () => ({ type: Math.random() < .5 ? 'pancake' : 'shake', state: 'ring', pop: 0, rot: 0 });
+  const newItem = () => ({ type: Math.random() < .5 ? 'pancake' : 'shake', gold: playing && Math.random() < (fever > 0 ? .25 : .07), state: 'ring', pop: 0, rot: 0 });
   function prefill() {
     slots = Array.from({ length: L.n }, () => null);
     for (let i = 0; i < L.n; i++) if (i % 3 !== 2) slots[i] = Object.assign(newItem(), { pop: 1 });
@@ -552,8 +581,8 @@ body {
     return best;
   }
   const count = () => slots.filter(Boolean).length;
-  const spinSpeed = () => TAU / 11 * (1 + Math.min(1, score / 100) * (mode === 'challenge' ? 1 : .5));
-  const spawnEvery = () => mode === 'challenge' ? Math.max(.55, 1.4 - score * .01) : Math.max(.9, 1.6 - score * .006);
+  const spinSpeed = () => TAU / 11 * (1 + Math.min(1, eaten / 100) * (mode === 'challenge' ? 1 : .5)) * (fever > 0 ? 1.5 : 1);
+  const spawnEvery = () => (mode === 'challenge' ? Math.max(.55, 1.4 - eaten * .01) : Math.max(.9, 1.6 - eaten * .006)) * (fever > 0 ? .5 : 1);
   function trySpawn() {
     let back = -1, bd = 1e9;
     slots.forEach((it, i) => { const d = adiff(slotAngle(i), -Math.PI / 2); if (d < bd) { bd = d; back = i; } });
@@ -563,7 +592,7 @@ body {
 
   // ---------------- game flow ----------------
   function startGame(m) {
-    mode = m; score = 0; combo = 0; lives = 3; playing = true; paused = false; spawnT = .6;
+    mode = m; score = 0; combo = 0; lives = 3; eaten = 0; maxCombo = 0; fever = 0; playing = true; paused = false; spawnT = .6;
     for (const k in animals) Object.assign(animals[k], { mood: 'idle', moodT: 0, hold: null, belly: 0, party: 0, bubble: null });
     parts = []; pops = []; fx = []; drag = null; prefill();
     $('startOv').hidden = $('overOv').hidden = $('pauseOv').hidden = true;
@@ -576,14 +605,15 @@ body {
     if (!playing) return;
     paused = p; $('pauseOv').hidden = !p;
     if (p) bgmStop(); else bgmStart();
-    if (p) $('pauseBest').textContent = `いま ${score} こ ／ ベスト ${store.get(bestKey(), 0)} こ`;
+    if (p) $('pauseBest').textContent = `いま ${score} てん ／ ベスト ${store.get(bestKey(), 0)} てん`;
   }
   function toMenu() { bgmStop(); playing = false; paused = false; $('pauseOv').hidden = $('overOv').hidden = true; $('startOv').hidden = false; }
   function gameOver() {
     playing = false; bgmStop();
     setTimeout(() => {
       $('finalScore').textContent = score;
-      $('overBest').textContent = `ベスト ${store.get(bestKey(), 0)} こ`;
+      $('overStats').textContent = `とどけた かず ${eaten} こ ／ さいだい ${maxCombo} コンボ`;
+      $('overBest').textContent = `ベスト ${store.get(bestKey(), 0)} てん`;
       $('overOv').hidden = false;
     }, 900);
   }
@@ -601,7 +631,9 @@ body {
   const HEART = full => `<svg viewBox="0 0 28 26" class="${full ? '' : 'lost'}" aria-hidden="true"><path d="M14 24.5C6 18.6 1.5 14 1.5 8.6 1.5 4.8 4.4 2 8 2c2.6 0 4.6 1.4 6 3.5C15.4 3.4 17.4 2 20 2c3.6 0 6.5 2.8 6.5 6.6 0 5.4-4.5 10-12.5 15.9z" fill="${full ? '#FF4F7B' : '#E9E1E8'}" stroke="${full ? '#E0335F' : '#D6CCD5'}" stroke-width="1.5"/>${full ? '<ellipse cx="8.5" cy="8" rx="2.6" ry="1.8" fill="#fff" opacity=".75" transform="rotate(-30 8.5 8)"/>' : ''}</svg>`;
   function updateHud() {
     $('score').textContent = score;
-    const cc = $('combo'); cc.hidden = combo < 3; cc.textContent = `${combo} コンボ！`;
+    const cc = $('combo'), left = FEVER_EVERY - combo % FEVER_EVERY;
+    cc.hidden = combo < 3 || fever > 0; cc.textContent = `${combo} コンボ！ フィーバーまで あと${left}`;
+    $('feverChip').hidden = !(fever > 0);
     $('lives').innerHTML = [0, 1, 2].map(i => HEART(i < lives)).join('');
     $('lives').setAttribute('aria-label', `ライフ のこり ${lives}`);
   }
@@ -615,28 +647,40 @@ body {
     const it = slots[i]; if (!it) return;
     const p = ringPos(slotAngle(i)), an = animals[who];
     slots[i] = null;
-    fx.push({ type: it.type, state: 'slide', who, t: 0,
+    fx.push({ type: it.type, gold: it.gold, state: 'slide', who, t: 0,
       fx: it.state === 'ring' ? p.x : it.x, fy: it.state === 'ring' ? p.y : it.y,
       tx: mouthPos(an).x, ty: mouthPos(an).y, x: p.x, y: p.y, sc: p.sc, sc0: it.state === 'drag' ? L.s * 1.1 : p.sc, rot: 0, a: 1 });
     sfxSlide();
   }
+  function startFever() {
+    fever = FEVER_TIME; banner('フィーバータイム！ ×2');
+    [784, 988, 1175, 1568].forEach((f, i) => tone(f, i * .06, .2, 'triangle', .1));
+    for (let i = 0; i < (reduceMotion ? 10 : 40); i++) parts.push({ kind: i % 2 ? 'heart' : 'spark', x: Math.random() * W, y: -20 - Math.random() * H * .3, vx: (Math.random() - .5) * 40, vy: 60 + Math.random() * 90, life: 2.2, size: L.k * (.25 + Math.random() * .2), col: pick(['#FF6F9C', '#FFD54A', '#7CC4FF', '#7ED957', '#B385F2']) });
+    updateHud();
+  }
+  function endFever(text) { if (fever <= 0) return; fever = 0; pops.push({ x: L.cx, y: L.hudH + 60, text, life: 1.2, color: '#B385F2' }); updateHud(); }
   function feed(who) { if (!playing || paused) return; const f = frontSlot(); if (f >= 0) sendSlot(f, who); }
 
   function arrive(it) {
     const an = animals[it.who];
     if (it.type === an.food) {
-      combo++; score++;
+      combo++; eaten++; maxCombo = Math.max(maxCombo, combo);
+      const pts = (it.gold ? 3 : 1) * (fever > 0 ? 2 : 1);
+      score += pts;
       if (score > store.get(bestKey(), 0)) store.set(bestKey(), score);
+      const mp = mouthPos(an);
+      pops.push({ x: mp.x, y: mp.y - L.k * .6, text: it.gold ? `+${pts} ゴールデン！` : `+${pts}`, life: 1, color: it.gold ? '#E89A00' : fever > 0 ? '#FF5D93' : '#FF8A1F', big: it.gold || fever > 0 });
+      if (it.gold) { tone(1568, .05, .25, 'triangle', .08); tone(2093, .12, .3, 'sine', .06); }
       an.mood = 'eat'; an.moodT = .9; an.hold = it.type; an.belly++;
       an.bubble = { text: pick(an.kind === 'bear' ? ['やったー！', 'おいしい！', 'もぐもぐ'] : ['やったー！', 'あまーい！', 'もぐもぐ']), color: '#FF8A1F', life: 1 };
       sfxYum();
       const n = reduceMotion ? 3 : 7;
       for (let i = 0; i < n; i++) parts.push({ kind: i % 2 ? 'heart' : 'spark', x: an.x + (Math.random() - .5) * L.r * 1.6, y: L.headY - L.r * .2, vx: (Math.random() - .5) * 80, vy: -70 - Math.random() * 80, life: 1, size: L.r * (.2 + Math.random() * .12), col: i % 2 ? pick(['#FF6F9C', '#FF9EC0']) : pick(['#FFD54A', '#FFE98A']) });
       if (an.belly % 10 === 0) party(an);
-      if (combo > 0 && combo % 10 === 0) banner(`すごい！ ${combo} コンボ`);
+      if (combo % FEVER_EVERY === 0) startFever();
       it.state = 'gone';
     } else {
-      combo = 0;
+      combo = 0; endFever('フィーバー おしまい');
       an.mood = 'sad'; an.moodT = 1; an.hold = null;
       an.bubble = { text: an.kind === 'bear' ? 'こっちじゃないよ' : 'あれれ？', color: '#2F86E0', life: 1.2 };
       sfxNo();
@@ -741,6 +785,11 @@ body {
     pops = pops.filter(p => p.life > 0);
     if (paused) return;
 
+    if (fever > 0 && playing) {
+      fever -= dt;
+      $('feverBar').style.width = `${Math.max(0, fever / FEVER_TIME) * 100}%`;
+      if (fever <= 0) { fever = .0001; endFever('フィーバー おしまい'); }
+    }
     spin += spinSpeed() * dt;
     spawnT -= dt;
     if (spawnT <= 0) {
@@ -751,12 +800,12 @@ body {
         const f = frontSlot();
         if (f >= 0) {
           const q = ringPos(slotAngle(f));
-          fx.push({ type: slots[f].type, state: 'reject', x: q.x, y: q.y, sc: q.sc, vx: (Math.random() - .5) * L.k, vy: -L.k * 3, rot: 0, a: 1 });
+          fx.push({ type: slots[f].type, gold: slots[f].gold, state: 'reject', x: q.x, y: q.y, sc: q.sc, vx: (Math.random() - .5) * L.k, vy: -L.k * 3, rot: 0, a: 1 });
           slots[f] = null;
         }
-        combo = 0; sfxNo(); updateHud();
         pops.push({ x: L.cx, y: L.tableY - L.ry - L.k * .6, text: 'テーブルがいっぱい！', life: 1.2, color: '#FF5D93' });
-        loseLife(); spawnT = spawnEvery();
+        if (fever > 0) spawnT = spawnEvery();   // bonus time forgives a full table
+        else { combo = 0; sfxNo(); updateHud(); loseLife(); spawnT = spawnEvery(); }
       }
     }
     slots.forEach((it, i) => {
@@ -786,11 +835,16 @@ body {
   }
 
   // ---------------- render ----------------
-  function drawFoodAt(type, x, y, size, rot = 0, alpha = 1, shadow = false) {
+  function drawFoodAt(type, x, y, size, rot = 0, alpha = 1, shadow = false, gold = false) {
     ctx.save(); ctx.globalAlpha = Math.max(0, alpha);
     ctx.translate(x, y); ctx.rotate(rot);
     if (shadow) E(ctx, 0, .5 * size, .45 * size, .1 * size, 'rgba(40,60,110,.2)');
-    drawFood(ctx, type, 0, 0, size);
+    if (gold) E(ctx, 0, .05 * size, .62 * size, .5 * size, rad(ctx, 0, 0, 0, 0, 0, .62 * size, ['rgba(255,230,120,.75)', 'rgba(255,210,60,0)']));
+    drawFood(ctx, gold ? type + '_gold' : type, 0, 0, size);
+    if (gold && !reduceMotion) for (let i = 0; i < 3; i++) {
+      const a = clock * 2 + i * TAU / 3, tw = .5 + .5 * Math.sin(clock * 6 + i * 2);
+      sparkle(ctx, Math.cos(a) * .5 * size, -.2 * size + Math.sin(a) * .35 * size, .12 * size * tw + 1, '#FFF3B0');
+    }
     ctx.restore();
   }
   function spriteFor(an) { return `${an.kind}_${an.mood === 'eat' || an.party > 0 ? 'eat' : an.mood === 'sad' ? 'sad' : 'idle'}`; }
@@ -810,6 +864,15 @@ body {
   function animalTop(an) { const im = SPR[spriteFor(an)]; return L.baseY - (ok(im) ? im.naturalHeight : 360) * L.sprScale; }
   function draw() {
     ctx.drawImage(bgc, 0, 0, W, H);
+    if (fever > 0) {
+      const hue = (clock * 120) % 360, a = .18 + .08 * Math.sin(clock * 8);
+      ctx.fillStyle = `hsla(${hue},100%,70%,${a})`; ctx.fillRect(0, 0, W, H);
+      if (!reduceMotion) {
+        ctx.save(); ctx.translate(L.cx, L.tableY); ctx.rotate(clock * .6);
+        for (let i = 0; i < 12; i++) { ctx.rotate(TAU / 12); ctx.fillStyle = i % 2 ? 'rgba(255,255,255,.16)' : 'rgba(255,240,150,.14)'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-W * .12, -Math.max(W, H)); ctx.lineTo(W * .12, -Math.max(W, H)); ctx.fill(); }
+        ctx.restore();
+      }
+    }
     drawTableBase(ctx);
     drawAnimal(animals.bear); drawAnimal(animals.rabbit);
     drawTableTop(ctx);
@@ -822,15 +885,15 @@ body {
       if (o.vase) { drawVase(ctx); continue; }
       const sc = o.q.sc * (.4 + .6 * o.it.pop);
       if (f >= 0 && o.it === slots[f]) E(ctx, o.q.x, o.q.y + .38 * sc, .5 * sc, .16 * sc, 'rgba(255,220,90,.6)');
-      drawFoodAt(o.it.type, o.q.x, o.q.y, sc);
+      drawFoodAt(o.it.type, o.q.x, o.q.y, sc, 0, 1, false, o.it.gold);
     }
     if (f >= 0) {
       const q = ringPos(slotAngle(f)), ay = q.y - .95 * q.sc - Math.abs(Math.sin(clock * 5)) * .12 * q.sc;
       ctx.beginPath(); ctx.moveTo(q.x - .14 * q.sc, ay - .14 * q.sc); ctx.lineTo(q.x + .14 * q.sc, ay - .14 * q.sc); ctx.lineTo(q.x, ay + .02 * q.sc); ctx.closePath();
       ctx.lineWidth = 3; ctx.strokeStyle = '#FFFFFF'; ctx.lineJoin = 'round'; ctx.stroke(); ctx.fillStyle = '#FFD54A'; ctx.fill();
     }
-    for (const it of fx) drawFoodAt(it.type, it.x, it.y, it.sc, it.rot, it.a);
-    slots.forEach(it => { if (it && (it.state === 'drag' || it.state === 'return')) drawFoodAt(it.type, it.x, it.y, L.s * (it.state === 'drag' ? 1.1 : 1), 0, 1, it.state === 'drag'); });
+    for (const it of fx) drawFoodAt(it.type, it.x, it.y, it.sc, it.rot, it.a, false, it.gold);
+    slots.forEach(it => { if (it && (it.state === 'drag' || it.state === 'return')) drawFoodAt(it.type, it.x, it.y, L.s * (it.state === 'drag' ? 1.1 : 1), 0, 1, it.state === 'drag', it.gold); });
     for (const p of parts) {
       ctx.globalAlpha = Math.min(1, p.life);
       if (p.kind === 'heart') heart(ctx, p.x, p.y, p.size, p.col); else sparkle(ctx, p.x, p.y, p.size * .6, p.col);
@@ -858,9 +921,10 @@ body {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (const p of pops) {
       ctx.globalAlpha = Math.min(1, p.life * 2);
-      ctx.font = `800 ${clamp(L.k * .32, 14, 24)}px "M PLUS Rounded 1c", sans-serif`;
+      ctx.font = `800 ${clamp(L.k * (p.big ? .45 : .32), 14, p.big ? 34 : 24)}px "M PLUS Rounded 1c", sans-serif`;
       ctx.lineWidth = 5; ctx.strokeStyle = '#FFFFFF'; ctx.lineJoin = 'round';
-      ctx.strokeText(p.text, p.x, p.y); ctx.fillStyle = p.color; ctx.fillText(p.text, p.x, p.y);
+      const hw = ctx.measureText(p.text).width / 2 + 8, px = clamp(p.x, hw, W - hw);   // keep popups on screen
+      ctx.strokeText(p.text, px, p.y); ctx.fillStyle = p.color; ctx.fillText(p.text, px, p.y);
     }
     ctx.globalAlpha = 1;
   }
@@ -879,16 +943,16 @@ body {
     });
   }
   function boot(data) {
-    renderMute(); layout(); makeGingham(); prefill(); updateHud(); drawIcons();
+    makeGoldSprites(); renderMute(); layout(); makeGingham(); prefill(); updateHud(); drawIcons();
     if (data && data.playing) {
-      mode = data.mode || 'zen'; score = data.score || 0; combo = data.combo || 0; lives = data.lives ?? 3;
+      mode = data.mode || 'zen'; score = data.score || 0; combo = data.combo || 0; lives = data.lives ?? 3; eaten = data.eaten || 0; maxCombo = data.maxCombo || 0;
       playing = true; $('startOv').hidden = true; $('lives').hidden = mode !== 'challenge'; $('modePill').hidden = mode === 'challenge'; updateHud();
     }
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { buildBg(); drawIcons(); });
     addEventListener('resize', () => { layout(); makeGingham(); });
     requestAnimationFrame(t => { lastT = t; frame(t); });
   }
-  window.claude?.hot?.snapshot?.(() => ({ mode, score, combo, lives, playing }));
+  window.claude?.hot?.snapshot?.(() => ({ mode, score, combo, lives, playing, eaten, maxCombo }));
   const bootWhenReady = d => sprReady.then(() => boot(d));
   window.claude?.hot?.ready ? window.claude.hot.ready(bootWhenReady) : bootWhenReady(window.claude?.hot?.data ?? {});
 })();
