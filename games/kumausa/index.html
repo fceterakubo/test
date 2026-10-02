@@ -174,7 +174,7 @@ body {
         <li class="bear"><canvas data-icon="pancake" width="104" height="104"></canvas><span class="arrow">→</span><canvas data-icon="bear" width="104" height="104"></canvas><span>パンケーキは<br><b>くまちゃん</b></span></li>
         <li class="rabbit"><canvas data-icon="shake" width="104" height="104"></canvas><span class="arrow">→</span><canvas data-icon="rabbit" width="104" height="104"></canvas><span>ミルクシェーキは<br><b>うさぎちゃん</b></span></li>
       </ul>
-      <p class="how">10コンボで <b>フィーバータイム</b>（5びょう・てんすう2ばい）！ キラキラの <b>ゴールデン</b> は 3ばい。<br>まるいテーブルが くるくる まわるよ。<br>てまえの たべものを 左／右 タップ で すべらせて とどけよう。<br>ドラッグ でも ← → キー でも OK。</p>
+      <p class="how">10コンボで <b>フィーバータイム</b>（5びょう・てんすう2ばい）！ キラキラの <b>ゴールデン</b> は 3ばい。<br>まるいテーブルが くるくる まわるよ。<br>たべものを 左右に <b>スワイプ</b>、または 画面の 左／右を <b>タップ</b> して とどけよう。<br>← → キー でも OK。</p>
       <div class="btns">
         <button class="btn green" id="zenBtn" type="button"><span class="tri"></span>スタート <small>のんびり・ずっとあそべる</small></button>
         <button class="btn orange" id="chBtn" type="button">チャレンジ <small>ライフ3つ</small></button>
@@ -736,12 +736,19 @@ body {
   });
   cv.addEventListener('pointerup', e => {
     if (!drag || e.pointerId !== drag.id) return;
-    const p = pos(e), { i, it, moved } = drag;
+    const p = pos(e), drag0 = drag, { i, it, moved } = drag;
     drag = null;
     if (slots[i] !== it) return;
     if (!playing || paused) { it.state = 'return'; return; }
-    if (!moved) { sendSlot(i, p.x < L.cx ? 'bear' : 'rabbit'); return; }
-    const tgt = dropTarget(p);
+    if (!moved) {
+      // a plain tap on the food can't tell which way to go, so ask for a swipe instead of guessing
+      it.state = 'return';
+      pops.push({ x: it.x, y: it.y - L.s * .9, text: '← スワイプしてね →', life: 1.1, color: '#2F86E0' });
+      tone(660, 0, .08, 'triangle', .06);
+      return;
+    }
+    const dx = p.x - drag0.sx, flick = Math.abs(dx) > 25 ? (dx < 0 ? 'bear' : 'rabbit') : null;
+    const tgt = dropTarget(p) || flick;
     if (tgt) sendSlot(i, tgt); else it.state = 'return';
   });
   cv.addEventListener('pointercancel', e => {
