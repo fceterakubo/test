@@ -88,6 +88,15 @@ body {
 .round-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #D9770A; }
 .round-btn:focus-visible, .btn:focus-visible, .text-btn:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
 @media (max-width: 759px) { .title-banner { display: none; } }
+.lv-pill, .mode-pill, .lives-pill, .combo-chip, .fever-chip { white-space: nowrap; }
+@media (max-width: 380px) {
+  .hud { padding: 8px 10px; gap: 6px; }
+  .hud-right { gap: 6px; }
+  .lv-pill, .mode-pill { padding: 8px 9px; font-size: 13px; }
+  .score-pill { padding-right: 12px; }
+  .lives-pill { padding: 5px 8px; } .lives-pill svg { width: 22px; height: 20px; }
+  .round-btn { width: 42px; height: 42px; }
+}
 
 /* message banner */
 .banner {
@@ -130,6 +139,8 @@ body {
 }
 .btn small { font-size: 12px; font-weight: 700; opacity: .95; }
 .btn.green { background: linear-gradient(#7EDB6A, #3DB04A); box-shadow: 0 5px 0 #2C8A37, 0 10px 18px rgba(44, 138, 55, .25); }
+.btn.red { background: linear-gradient(#FF7A7A, #E0344B); box-shadow: 0 5px 0 #A81F33, 0 10px 18px rgba(168, 31, 51, .28); }
+.lv-pill.oni { background: linear-gradient(#FF7A7A, #E0344B); box-shadow: 0 4px 0 rgba(168, 31, 51, .35); }
 .btn.orange { background: linear-gradient(#FFC657, #FF9418); box-shadow: 0 5px 0 #D46F06, 0 10px 18px rgba(212, 111, 6, .25); }
 .btn.blue { background: linear-gradient(#5DB8FF, #2A7FE0); box-shadow: 0 5px 0 #1C5FB0, 0 10px 18px rgba(28, 95, 176, .25); }
 .btn:active { transform: translateY(4px); box-shadow: none; }
@@ -149,10 +160,6 @@ body {
 .rank li.me { background: #FFF3C4; box-shadow: inset 0 0 0 2px #FFD54A; }
 .rank-empty { font: 500 13px var(--body); color: #9A7A66; margin: 10px 0 14px; }
 .rank-new { font: 800 16px var(--display); color: var(--pink); margin: 6px 0 4px; }
-.rank-entry { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 0 0 6px; }
-.rank-entry input { font: 700 16px var(--body); padding: 8px 12px; border-radius: 12px; border: 2px solid #CFEAFF; width: 9.5em; color: var(--brown); }
-.rank-entry input:focus-visible { outline: 3px solid var(--blue); outline-offset: 1px; }
-.rank-entry .btn { font-size: 15px; padding: 8px 16px; }
 .tabs { display: flex; gap: 6px; justify-content: center; margin: 12px 0 2px; }
 .tab { border: 0; border-radius: 999px; padding: 7px 16px; font: 800 13px var(--display); background: #EEF5FF; color: #5A7A9A; cursor: pointer; }
 .tab[aria-selected="true"] { background: var(--blue); color: #fff; }
@@ -199,10 +206,11 @@ body {
         <li class="bear"><canvas data-icon="pancake" width="104" height="104"></canvas><span class="arrow">→</span><canvas data-icon="bear" width="104" height="104"></canvas><span>パンケーキは<br><b>くまちゃん</b></span></li>
         <li class="rabbit"><canvas data-icon="shake" width="104" height="104"></canvas><span class="arrow">→</span><canvas data-icon="rabbit" width="104" height="104"></canvas><span>ミルクシェーキは<br><b>うさぎちゃん</b></span></li>
       </ul>
-      <p class="how">10コンボで <b>フィーバータイム</b>（5びょう・てんすう2ばい）！ キラキラの <b>ゴールデン</b> は 3ばい。<br>50てん ごとに <b>スピードアップ</b>！ まるいテーブルが くるくる まわるよ。<br>たべものを 左右に <b>スワイプ</b>、または 画面の 左／右を <b>タップ</b> して とどけよう。<br>← → キー でも OK。</p>
+      <p class="how"><b>10コンボ</b>で フィーバー（てんすう2ばい）！ キラキラの <b>ゴールデン</b>は 3ばい。<br><b>50てん</b>ごとに スピードアップ！<br>たべものを 左右に <b>スワイプ</b>、または 画面の 左／右を <b>タップ</b>。← → キーも OK。</p>
       <div class="btns">
         <button class="btn green" id="zenBtn" type="button"><span class="tri"></span>スタート <small>のんびり・ずっとあそべる</small></button>
         <button class="btn orange" id="chBtn" type="button">チャレンジ <small>ライフ3つ</small></button>
+        <button class="btn red" id="oniBtn" type="button">おにモード <small>スピードアップが 3ばい はやい</small></button>
       </div>
       <div class="toggles"><button class="text-btn" id="rankBtn" type="button">ランキング</button><button class="text-btn" id="bgmBtn1" type="button">おんがく：ON</button><button class="text-btn" id="muteBtn1" type="button">こうかおん：ON</button></div>
     </div>
@@ -226,13 +234,7 @@ body {
       <p class="result"><b id="finalScore">0</b> てん！</p>
       <p class="stats" id="overStats"></p>
       <p class="best-line" id="overBest"></p>
-      <form class="rank-box" id="rankForm" hidden>
-        <p class="rank-new" id="rankNew"></p>
-        <div class="rank-entry">
-          <input id="rankName" maxlength="8" autocomplete="nickname" placeholder="なまえ（8もじまで）" aria-label="なまえ">
-          <button class="btn orange" id="rankSave" type="submit">とうろく</button>
-        </div>
-      </form>
+      <p class="rank-new" id="rankNew" hidden></p>
       <ol class="rank" id="overRank"></ol>
       <div class="btns">
         <button class="btn orange" id="againBtn" type="button">もういちど</button>
@@ -248,6 +250,7 @@ body {
       <div class="tabs" role="tablist">
         <button class="tab" id="tabZen" role="tab" type="button" aria-selected="true">のんびり</button>
         <button class="tab" id="tabCh" role="tab" type="button" aria-selected="false">チャレンジ</button>
+        <button class="tab" id="tabOni" role="tab" type="button" aria-selected="false">おに</button>
       </div>
       <ol class="rank" id="rankList"></ol>
       <p class="rank-empty" id="rankEmpty" hidden>まだ きろくが ないよ。あそんで ランキングに のろう！</p>
@@ -372,7 +375,9 @@ body {
     bear:   { kind: 'bear',   food: 'pancake', dir: 1,  mood: 'idle', moodT: 0, hold: null, belly: 0, party: 0, blinkT: 2, bubble: null },
     rabbit: { kind: 'rabbit', food: 'shake',   dir: -1, mood: 'idle', moodT: 0, hold: null, belly: 0, party: 0, blinkT: 3.3, bubble: null }
   };
-  const bestKey = () => mode === 'zen' ? 'kumausa-best-zen' : 'kumausa-best-ch';
+  const hard = () => mode !== 'zen';   // challenge and oni both use lives
+  const modeTag = m => m === 'zen' ? 'zen' : m === 'oni' ? 'oni' : 'ch';
+  const bestKey = () => 'kumausa-best-' + modeTag(mode);
 
   // ---------------- layout ----------------
   function layout() {
@@ -386,8 +391,11 @@ body {
     const rx = Math.max(2.4 * k, Math.min(W / 2 - 12, 4.8 * k));
     const tableY = hudH + (H - hudH) * .62;
     const ry = Math.max(.9 * k, Math.min(rx * (W < H ? .55 : .42), H - tableY - 1.9 * k));
-    const ringR = .42;
-    const s = clamp(Math.min(.95 * k, rx * .38), 28, 100);
+    // Portrait phones are width-limited, so size the food from the table width instead of k
+    // (about 1.6x larger than before on a 390px phone) and widen the turntable ring to fit it.
+    const portrait = W < H;
+    const ringR = portrait ? .5 : .42;
+    const s = portrait ? clamp(rx * .44, 28, 100) : clamp(Math.min(.95 * k, rx * .38), 28, 100);
     const ringAvg = Math.sqrt(((rx * ringR) ** 2 + (ry * ringR) ** 2) / 2);
     const n = clamp(Math.floor(TAU * ringAvg / (s * 1.15)), 5, 10);
     // characters sit behind the far side of the table; the table top hides their lower half
@@ -395,7 +403,7 @@ body {
     const off = Math.min(rx * .64, W / 2 - 190 * sprScale - 4);
     const baseY = tableY - ry + 95 * sprScale;   // hide roughly the bottom quarter behind the table
     L = {
-      k, r, s, rx, ry, hudH, ringR, n, cx: W / 2, tableY, sprScale, baseY,
+      k, r, s, rx, ry, hudH, ringR, ttR: ringR + .16, n, cx: W / 2, tableY, sprScale, baseY,
       groundY: Math.min(H - .25 * k, tableY + ry + 2 * k),
       headY: baseY - 230 * sprScale,
       matY: tableY + ry * .18,
@@ -511,7 +519,7 @@ body {
     c.beginPath(); c.ellipse(cx, cy, rx, ry, 0, 0, TAU); c.fillStyle = gingham; c.fill();
     c.lineWidth = .06 * k; c.strokeStyle = '#FFC2D6'; c.stroke();
     // lazy susan
-    const dy = -.04 * k, drx = rx * .58, dry = ry * .58;
+    const dy = -.04 * k, drx = rx * L.ttR, dry = ry * L.ttR;
     E(c, cx, cy + dy + .07 * k, drx, dry, '#D9C2CC');
     E(c, cx, cy + dy, drx, dry, rad(c, cx - drx * .3, cy - dry * .4, 0, cx, cy, drx, ['#FFFFFF', '#FFF7FA', '#F6E6EE']));
     for (let j = 0; j < 20; j++) {
@@ -572,7 +580,7 @@ body {
     src.connect(f).connect(g).connect(bgm.gain); src.start(t); src.stop(t + .06);
   }
   function bgmSchedule() {
-    const eighth = 60 / ((mode === 'challenge' ? 124 : 112) * (fever > 0 ? 1.25 : 1)) / 2;
+    const eighth = 60 / ((mode === 'oni' ? 132 : hard() ? 124 : 112) * (fever > 0 ? 1.25 : 1)) / 2;
     while (bgm.next < ac.currentTime + .15) {
       const t = bgm.next, i = bgm.step % 64, bar = Math.floor(i / 8), beat = i % 8, ch = CHORDS[bar];
       const m = MELODY[i];
@@ -650,14 +658,15 @@ body {
   // ratio (about +9.6%), so every step feels alike and Lv.13 lands on 3x the starting speed.
   // Relaxed mode stops at 2.2x so the spinning table never gets dizzying (fever included).
   const LEVEL_EVERY = 50, SPEED_STEP = Math.pow(3, 1 / 12);
-  const speedCap = () => mode === 'challenge' ? 3 : 2.2;
-  const levelOf = sc => 1 + Math.floor(sc / LEVEL_EVERY);
+  const speedCap = () => hard() ? 3 : 2.2;
+  // oni mode climbs the same levels three times as fast (every ~17 points)
+  const levelOf = sc => 1 + Math.floor(sc * (mode === 'oni' ? 3 : 1) / LEVEL_EVERY);
   const speedMul = () => Math.min(speedCap(), Math.pow(SPEED_STEP, level - 1));
   const spinSpeed = () => {
     const m = speedMul() * (fever > 0 ? 1.5 : 1);
-    return TAU / 11 * (mode === 'challenge' ? m : Math.min(speedCap(), m));
+    return TAU / 11 * (hard() ? m : Math.min(speedCap(), m));
   };
-  const spawnEvery = () => (mode === 'challenge' ? 1.4 : 1.6) / speedMul() * (fever > 0 ? .5 : 1);
+  const spawnEvery = () => (hard() ? 1.4 : 1.6) / speedMul() * (fever > 0 ? .5 : 1);
   function trySpawn() {
     let back = -1, bd = 1e9;
     slots.forEach((it, i) => { const d = adiff(slotAngle(i), -Math.PI / 2); if (d < bd) { bd = d; back = i; } });
@@ -670,8 +679,8 @@ body {
     mode = m; score = 0; combo = 0; lives = 3; eaten = 0; maxCombo = 0; fever = 0; level = 1; boost = 0; playing = true; paused = false; spawnT = .6;
     for (const k in animals) Object.assign(animals[k], { mood: 'idle', moodT: 0, hold: null, belly: 0, party: 0, bubble: null });
     parts = []; pops = []; fx = []; drag = null; prefill();
-    $('startOv').hidden = $('overOv').hidden = $('pauseOv').hidden = $('rankOv').hidden = true; pending = null;
-    $('lives').hidden = mode !== 'challenge'; $('modePill').hidden = mode === 'challenge';
+    $('startOv').hidden = $('overOv').hidden = $('pauseOv').hidden = $('rankOv').hidden = true;
+    $('lives').hidden = !hard(); $('modePill').hidden = hard(); $('lvPill').classList.toggle('oni', mode === 'oni');
     updateHud(); banner('がんばろう！');
     audio(); tone(784, 0, .1, 'triangle'); tone(1047, .08, .14, 'triangle');
     bgm.step = 0; bgmStop(); bgmStart();
@@ -685,7 +694,7 @@ body {
   function toMenu() { bgmStop(); playing = false; paused = false; $('pauseOv').hidden = $('overOv').hidden = $('rankOv').hidden = true; $('startOv').hidden = false; }
   // ---------- local top-10 ranking (kept in this browser only, one list per mode) ----------
   const RANK_MAX = 10;
-  const rankKey = m => m === 'zen' ? 'kumausa-rank-zen' : 'kumausa-rank-ch';
+  const rankKey = m => 'kumausa-rank-' + modeTag(m);
   function loadRank(m) {
     const r = store.get(rankKey(m), []);
     return Array.isArray(r) ? r.filter(e => e && typeof e.score === 'number').slice(0, RANK_MAX) : [];
@@ -697,46 +706,39 @@ body {
     list.forEach((e, i) => {
       const li = document.createElement('li'); if (e.id === meId) li.className = 'me';
       const no = document.createElement('span'); no.className = 'no'; no.textContent = `${i + 1}`;
-      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = e.name || 'ななしさん';
-      const sub = document.createElement('small'); sub.textContent = `${e.date || ''}  ${e.eaten || 0}こ ／ ${e.maxCombo || 0}コンボ ／ Lv.${e.level || 1}`; nm.appendChild(sub);
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = e.date || '';
+      const sub = document.createElement('small'); sub.textContent = `${e.eaten || 0}こ ／ ${e.maxCombo || 0}コンボ ／ Lv.${e.level || 1}`; nm.appendChild(sub);
       const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = `${e.score}`;
       li.append(no, nm, sc); ol.appendChild(li);
     });
     ol.hidden = !list.length;
   }
-  let pending = null;   // the finished run waiting for a name
+  // a finished run that makes the top 10 is saved straight away (no name needed)
   function showResult() {
     $('finalScore').textContent = score;
     $('overStats').textContent = `とどけた かず ${eaten} こ ／ さいだい ${maxCombo} コンボ ／ Lv.${level}`;
     const list = loadRank(mode);
-    pending = qualifies(list, score) ? { m: mode, score, eaten, maxCombo, level } : null;
-    $('overBest').textContent = list.length ? `ベスト ${Math.max(list[0].score, score)} てん` : '';
-    if (pending) {
-      $('rankNew').textContent = `ランキング ${rankPlace(list, score) + 1}い！ なまえを いれてね`;
-      $('rankName').value = store.get('kumausa-name', '');
+    let meId = null;
+    if (qualifies(list, score)) {
+      const d = new Date(), pad = n => String(n).padStart(2, '0'), place = rankPlace(list, score);
+      const entry = { id: `${d.getTime()}-${Math.random().toString(36).slice(2, 6)}`, score, eaten, maxCombo, level, date: `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}` };
+      list.splice(place, 0, entry); list.length = Math.min(list.length, RANK_MAX);
+      store.set(rankKey(mode), list);
+      meId = entry.id;
+      $('rankNew').textContent = place === 0 ? 'ランキング 1い！ さいこうきろく！' : `ランキング ${place + 1}い！`;
+      tone(988, .2, .12, 'triangle', .08); tone(1319, .28, .16, 'triangle', .08);
     }
-    $('rankForm').hidden = !pending;
-    renderRank($('overRank'), list, null);
+    $('rankNew').hidden = !meId;
+    $('overBest').textContent = list.length ? `ベスト ${list[0].score} てん` : '';
+    renderRank($('overRank'), list, meId);
     $('overOv').hidden = false;
-    if (pending) setTimeout(() => { try { $('rankName').focus(); } catch (e) {} }, 50);
-  }
-  function saveRank() {
-    if (!pending) return;
-    const name = ($('rankName').value || '').trim().slice(0, 8) || 'ななしさん';
-    store.set('kumausa-name', name === 'ななしさん' ? '' : name);
-    const d = new Date(), list = loadRank(pending.m);
-    const entry = { id: `${d.getTime()}-${Math.random().toString(36).slice(2, 6)}`, name, score: pending.score, eaten: pending.eaten, maxCombo: pending.maxCombo, level: pending.level, date: `${d.getMonth() + 1}/${d.getDate()}` };
-    list.splice(rankPlace(list, entry.score), 0, entry);
-    store.set(rankKey(pending.m), list.slice(0, RANK_MAX));
-    pending = null; $('rankForm').hidden = true;
-    renderRank($('overRank'), loadRank(mode), entry.id);
-    tone(988, 0, .12, 'triangle', .08); tone(1319, .08, .16, 'triangle', .08);
   }
   let rankTab = 'zen';
   function openRanking(m) {
     rankTab = m || rankTab;
     $('tabZen').setAttribute('aria-selected', String(rankTab === 'zen'));
     $('tabCh').setAttribute('aria-selected', String(rankTab === 'challenge'));
+    $('tabOni').setAttribute('aria-selected', String(rankTab === 'oni'));
     const list = loadRank(rankTab);
     renderRank($('rankList'), list, null); $('rankEmpty').hidden = list.length > 0;
     $('rankOv').hidden = false;
@@ -747,7 +749,7 @@ body {
     setTimeout(showResult, quit ? 0 : 900);
   }
   function loseLife() {
-    if (mode !== 'challenge') return;
+    if (!hard()) return;
     lives = Math.max(0, lives - 1); updateHud();
     if (lives === 0) gameOver();
   }
@@ -762,7 +764,7 @@ body {
     $('score').textContent = score;
     $('lvPill').textContent = `Lv.${level}`;
     const cc = $('combo'), left = FEVER_EVERY - combo % FEVER_EVERY;
-    cc.hidden = combo < 3 || fever > 0; cc.textContent = `${combo} コンボ！ フィーバーまで あと${left}`;
+    cc.hidden = combo < 3 || fever > 0; cc.textContent = `${combo}コンボ！ あと${left}で フィーバー`;
     $('feverChip').hidden = !(fever > 0);
     $('lives').innerHTML = [0, 1, 2].map(i => HEART(i < lives)).join('');
     $('lives').setAttribute('aria-label', `ライフ のこり ${lives}`);
@@ -811,10 +813,13 @@ body {
       if (leveled) { level = newLv; const lp = $('lvPill'); lp.classList.remove('up'); void lp.offsetWidth; lp.classList.add('up'); }
       if (combo % FEVER_EVERY === 0) startFever();
       if (leveled) {
-        if (combo % FEVER_EVERY === 0) pops.push({ x: L.cx, y: L.hudH + 70, text: `スピードアップ！ Lv.${level}`, life: 1.4, color: '#FF8A1F', big: true });
-        else banner(`スピードアップ！ Lv.${level}`);
+        // once the speed is already at its cap, a level-up is only a milestone: no "speed up" claim or speed lines
+        const faster = Math.pow(SPEED_STEP, level - 2) < speedCap() - 1e-6;
+        const text = faster ? `スピードアップ！ Lv.${level}` : `レベルアップ！ Lv.${level}`;
+        if (combo % FEVER_EVERY === 0) pops.push({ x: L.cx, y: L.hudH + 70, text, life: 1.4, color: '#FF8A1F', big: true });
+        else banner(text);
         [523, 659, 784, 1047].forEach((f, i) => tone(f, .1 + i * .05, .14, 'square', .035));
-        boost = 1; sfxWhoosh();
+        if (faster) { boost = 1; sfxWhoosh(); }
       }
       it.state = 'gone';
     } else {
@@ -895,7 +900,6 @@ body {
     drag = null;
   });
   addEventListener('keydown', e => {
-    if (e.target && e.target.tagName === 'INPUT') return;   // typing a name
     if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { feed('bear'); e.preventDefault(); }
     else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { feed('rabbit'); e.preventDefault(); }
     else if ((e.key === 'Escape' || e.key === 'p') && playing) setPaused(!paused);
@@ -903,15 +907,16 @@ body {
   $('zenBtn').addEventListener('click', () => startGame('zen'));
   $('zenBtn2').addEventListener('click', () => startGame('zen'));
   $('chBtn').addEventListener('click', () => startGame('challenge'));
+  $('oniBtn').addEventListener('click', () => startGame('oni'));
   $('againBtn').addEventListener('click', () => startGame(mode));
   $('pauseBtn').addEventListener('click', () => { if (playing) setPaused(!paused); });
   $('resumeBtn').addEventListener('click', () => setPaused(false));
   $('menuBtn').addEventListener('click', () => { if (playing) gameOver(true); else toMenu(); });
-  $('overMenuBtn').addEventListener('click', () => { pending = null; toMenu(); });
-  $('rankForm').addEventListener('submit', e => { e.preventDefault(); saveRank(); });
+  $('overMenuBtn').addEventListener('click', toMenu);
   $('rankBtn').addEventListener('click', () => openRanking());
   $('tabZen').addEventListener('click', () => openRanking('zen'));
   $('tabCh').addEventListener('click', () => openRanking('challenge'));
+  $('tabOni').addEventListener('click', () => openRanking('oni'));
   $('rankClose').addEventListener('click', () => { $('rankOv').hidden = true; });
   ['muteBtn1', 'muteBtn2'].forEach(id => $(id).addEventListener('click', () => { muted = !muted; store.set('kumausa-muted', muted); renderMute(); }));
   ['bgmBtn1', 'bgmBtn2'].forEach(id => $(id).addEventListener('click', () => {
@@ -948,7 +953,7 @@ body {
     if (spawnT <= 0) {
       const n = count(), cap = playing ? (mode === 'zen' ? slots.length - 1 : slots.length) : slots.length - 2;
       if (n < cap) { if (trySpawn()) spawnT = playing ? spawnEvery() : 1.2; }
-      else if (playing && mode === 'challenge') {
+      else if (playing && hard()) {
         // the table is full: the front item tumbles off
         const f = frontSlot();
         if (f >= 0) {
@@ -1141,7 +1146,7 @@ body {
     makeGoldSprites(); renderMute(); layout(); makeGingham(); prefill(); updateHud(); drawIcons();
     if (data && data.playing) {
       mode = data.mode || 'zen'; score = data.score || 0; combo = data.combo || 0; lives = data.lives ?? 3; eaten = data.eaten || 0; maxCombo = data.maxCombo || 0; level = data.level || levelOf(score);
-      playing = true; $('startOv').hidden = true; $('lives').hidden = mode !== 'challenge'; $('modePill').hidden = mode === 'challenge'; updateHud();
+      playing = true; $('startOv').hidden = true; $('lives').hidden = !hard(); $('modePill').hidden = hard(); $('lvPill').classList.toggle('oni', mode === 'oni'); updateHud();
     }
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { buildBg(); drawIcons(); });
     addEventListener('resize', () => { layout(); makeGingham(); });
