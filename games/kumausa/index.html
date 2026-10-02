@@ -836,6 +836,18 @@ body {
       if (p.kind === 'heart') heart(ctx, p.x, p.y, p.size, p.col); else sparkle(ctx, p.x, p.y, p.size * .6, p.col);
     }
     ctx.globalAlpha = 1;
+    // favourite-food badge above each head (the speech bubble takes its place while shown)
+    for (const k in animals) {
+      const an = animals[k];
+      if (an.bubble) continue;
+      const r = Math.max(18, 40 * L.sprScale), col = BOX[an.kind];
+      const x = an.x, y = Math.max(animalTop(an) - r * .2, L.hudH + r + 6) + (reduceMotion ? 0 : Math.sin(clock * 3 + (k === 'bear' ? 0 : 1.6)) * 3);
+      ctx.save(); ctx.shadowColor = 'rgba(60,60,120,.25)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 3;
+      E(ctx, x, y, r, r, col.rimLo); ctx.restore();
+      E(ctx, x, y, r * .86, r * .86, '#FFFFFF');
+      ctx.beginPath(); ctx.moveTo(x - r * .28, y + r * .78); ctx.lineTo(x, y + r * 1.25); ctx.lineTo(x + r * .28, y + r * .78); ctx.closePath(); ctx.fillStyle = col.rimLo; ctx.fill();
+      drawFoodIcon(ctx, an.food, x, y, r * 1.45);
+    }
     for (const k in animals) {
       const an = animals[k];
       if (!an.bubble) continue;
