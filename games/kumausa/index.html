@@ -658,7 +658,7 @@ body {
   // ratio (about +9.6%), so every step feels alike and Lv.13 lands on 3x the starting speed.
   // Relaxed mode stops at 2.2x so the spinning table never gets dizzying (fever included).
   const LEVEL_EVERY = 50, SPEED_STEP = Math.pow(3, 1 / 12);
-  const speedCap = () => hard() ? 3 : 2.2;
+  const speedCap = () => mode === 'oni' ? 4 : hard() ? 3 : 2.2;   // oni keeps climbing to 4x (Lv.17)
   // oni mode climbs the same levels three times as fast (every ~17 points)
   const levelOf = sc => 1 + Math.floor(sc * (mode === 'oni' ? 3 : 1) / LEVEL_EVERY);
   const speedMul = () => Math.min(speedCap(), Math.pow(SPEED_STEP, level - 1));
