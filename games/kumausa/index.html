@@ -139,6 +139,24 @@ body {
 .result { font: 800 18px var(--display); margin: 10px 0 4px; }
 .result b { font-size: 44px; color: var(--orange); }
 .best-line { font: 700 14px var(--body); color: #7A5A46; margin: 0 0 16px; }
+.rank { list-style: none; padding: 0; margin: 8px 0 14px; display: grid; gap: 4px; text-align: left; }
+.rank li { display: grid; grid-template-columns: 2.3em minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 5px 10px; border-radius: 12px; background: #F2F7FF; font: 700 14px var(--body); }
+.rank li .no { font: 800 15px var(--display); color: #8AA2BD; text-align: center; }
+.rank li:nth-child(1) .no { color: #E8A400; } .rank li:nth-child(2) .no { color: #9AA6B8; } .rank li:nth-child(3) .no { color: #C9814A; }
+.rank li .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank li .nm small { display: block; font: 500 11px var(--body); color: #9A7A66; }
+.rank li .sc { font: 800 16px var(--display); color: var(--orange); font-variant-numeric: tabular-nums; }
+.rank li.me { background: #FFF3C4; box-shadow: inset 0 0 0 2px #FFD54A; }
+.rank-empty { font: 500 13px var(--body); color: #9A7A66; margin: 10px 0 14px; }
+.rank-new { font: 800 16px var(--display); color: var(--pink); margin: 6px 0 4px; }
+.rank-entry { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 0 0 6px; }
+.rank-entry input { font: 700 16px var(--body); padding: 8px 12px; border-radius: 12px; border: 2px solid #CFEAFF; width: 9.5em; color: var(--brown); }
+.rank-entry input:focus-visible { outline: 3px solid var(--blue); outline-offset: 1px; }
+.rank-entry .btn { font-size: 15px; padding: 8px 16px; }
+.tabs { display: flex; gap: 6px; justify-content: center; margin: 12px 0 2px; }
+.tab { border: 0; border-radius: 999px; padding: 7px 16px; font: 800 13px var(--display); background: #EEF5FF; color: #5A7A9A; cursor: pointer; }
+.tab[aria-selected="true"] { background: var(--blue); color: #fff; }
+.tab:focus-visible { outline: 3px solid var(--orange); outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -186,7 +204,7 @@ body {
         <button class="btn green" id="zenBtn" type="button"><span class="tri"></span>スタート <small>のんびり・ずっとあそべる</small></button>
         <button class="btn orange" id="chBtn" type="button">チャレンジ <small>ライフ3つ</small></button>
       </div>
-      <div class="toggles"><button class="text-btn" id="bgmBtn1" type="button">おんがく：ON</button><button class="text-btn" id="muteBtn1" type="button">こうかおん：ON</button></div>
+      <div class="toggles"><button class="text-btn" id="rankBtn" type="button">ランキング</button><button class="text-btn" id="bgmBtn1" type="button">おんがく：ON</button><button class="text-btn" id="muteBtn1" type="button">こうかおん：ON</button></div>
     </div>
   </div>
 
@@ -196,7 +214,7 @@ body {
       <p class="best-line" id="pauseBest"></p>
       <div class="btns">
         <button class="btn green" id="resumeBtn" type="button"><span class="tri"></span>つづける</button>
-        <button class="btn blue" id="menuBtn" type="button">さいしょの画面へ</button>
+        <button class="btn blue" id="menuBtn" type="button">おしまいにする（けっかを見る）</button>
       </div>
       <div class="toggles"><button class="text-btn" id="bgmBtn2" type="button">おんがく：ON</button><button class="text-btn" id="muteBtn2" type="button">こうかおん：ON</button></div>
     </div>
@@ -208,10 +226,33 @@ body {
       <p class="result"><b id="finalScore">0</b> てん！</p>
       <p class="stats" id="overStats"></p>
       <p class="best-line" id="overBest"></p>
+      <form class="rank-box" id="rankForm" hidden>
+        <p class="rank-new" id="rankNew"></p>
+        <div class="rank-entry">
+          <input id="rankName" maxlength="8" autocomplete="nickname" placeholder="なまえ（8もじまで）" aria-label="なまえ">
+          <button class="btn orange" id="rankSave" type="submit">とうろく</button>
+        </div>
+      </form>
+      <ol class="rank" id="overRank"></ol>
       <div class="btns">
         <button class="btn orange" id="againBtn" type="button">もういちど</button>
         <button class="btn green" id="zenBtn2" type="button"><span class="tri"></span>のんびりモードで あそぶ</button>
       </div>
+      <button class="text-btn" id="overMenuBtn" type="button">さいしょの画面へ</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="rankOv" hidden>
+    <div class="card">
+      <h2>ランキング トップ10</h2>
+      <div class="tabs" role="tablist">
+        <button class="tab" id="tabZen" role="tab" type="button" aria-selected="true">のんびり</button>
+        <button class="tab" id="tabCh" role="tab" type="button" aria-selected="false">チャレンジ</button>
+      </div>
+      <ol class="rank" id="rankList"></ol>
+      <p class="rank-empty" id="rankEmpty" hidden>まだ きろくが ないよ。あそんで ランキングに のろう！</p>
+      <div class="btns"><button class="btn blue" id="rankClose" type="button">とじる</button></div>
+      <p class="rank-empty">きろくは この たんまつの ブラウザに ほぞんされます。</p>
     </div>
   </div>
 </div>
@@ -629,7 +670,7 @@ body {
     mode = m; score = 0; combo = 0; lives = 3; eaten = 0; maxCombo = 0; fever = 0; level = 1; boost = 0; playing = true; paused = false; spawnT = .6;
     for (const k in animals) Object.assign(animals[k], { mood: 'idle', moodT: 0, hold: null, belly: 0, party: 0, bubble: null });
     parts = []; pops = []; fx = []; drag = null; prefill();
-    $('startOv').hidden = $('overOv').hidden = $('pauseOv').hidden = true;
+    $('startOv').hidden = $('overOv').hidden = $('pauseOv').hidden = $('rankOv').hidden = true; pending = null;
     $('lives').hidden = mode !== 'challenge'; $('modePill').hidden = mode === 'challenge';
     updateHud(); banner('がんばろう！');
     audio(); tone(784, 0, .1, 'triangle'); tone(1047, .08, .14, 'triangle');
@@ -641,15 +682,69 @@ body {
     if (p) bgmStop(); else bgmStart();
     if (p) $('pauseBest').textContent = `いま ${score} てん ／ ベスト ${store.get(bestKey(), 0)} てん`;
   }
-  function toMenu() { bgmStop(); playing = false; paused = false; $('pauseOv').hidden = $('overOv').hidden = true; $('startOv').hidden = false; }
-  function gameOver() {
-    playing = false; bgmStop();
-    setTimeout(() => {
-      $('finalScore').textContent = score;
-      $('overStats').textContent = `とどけた かず ${eaten} こ ／ さいだい ${maxCombo} コンボ ／ Lv.${level}`;
-      $('overBest').textContent = `ベスト ${store.get(bestKey(), 0)} てん`;
-      $('overOv').hidden = false;
-    }, 900);
+  function toMenu() { bgmStop(); playing = false; paused = false; $('pauseOv').hidden = $('overOv').hidden = $('rankOv').hidden = true; $('startOv').hidden = false; }
+  // ---------- local top-10 ranking (kept in this browser only, one list per mode) ----------
+  const RANK_MAX = 10;
+  const rankKey = m => m === 'zen' ? 'kumausa-rank-zen' : 'kumausa-rank-ch';
+  function loadRank(m) {
+    const r = store.get(rankKey(m), []);
+    return Array.isArray(r) ? r.filter(e => e && typeof e.score === 'number').slice(0, RANK_MAX) : [];
+  }
+  const rankPlace = (list, sc) => { let i = 0; while (i < list.length && list[i].score >= sc) i++; return i; };   // ties keep the older entry above
+  const qualifies = (list, sc) => sc > 0 && rankPlace(list, sc) < RANK_MAX;
+  function renderRank(ol, list, meId) {
+    ol.textContent = '';
+    list.forEach((e, i) => {
+      const li = document.createElement('li'); if (e.id === meId) li.className = 'me';
+      const no = document.createElement('span'); no.className = 'no'; no.textContent = `${i + 1}`;
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = e.name || 'ななしさん';
+      const sub = document.createElement('small'); sub.textContent = `${e.date || ''}  ${e.eaten || 0}こ ／ ${e.maxCombo || 0}コンボ ／ Lv.${e.level || 1}`; nm.appendChild(sub);
+      const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = `${e.score}`;
+      li.append(no, nm, sc); ol.appendChild(li);
+    });
+    ol.hidden = !list.length;
+  }
+  let pending = null;   // the finished run waiting for a name
+  function showResult() {
+    $('finalScore').textContent = score;
+    $('overStats').textContent = `とどけた かず ${eaten} こ ／ さいだい ${maxCombo} コンボ ／ Lv.${level}`;
+    const list = loadRank(mode);
+    pending = qualifies(list, score) ? { m: mode, score, eaten, maxCombo, level } : null;
+    $('overBest').textContent = list.length ? `ベスト ${Math.max(list[0].score, score)} てん` : '';
+    if (pending) {
+      $('rankNew').textContent = `ランキング ${rankPlace(list, score) + 1}い！ なまえを いれてね`;
+      $('rankName').value = store.get('kumausa-name', '');
+    }
+    $('rankForm').hidden = !pending;
+    renderRank($('overRank'), list, null);
+    $('overOv').hidden = false;
+    if (pending) setTimeout(() => { try { $('rankName').focus(); } catch (e) {} }, 50);
+  }
+  function saveRank() {
+    if (!pending) return;
+    const name = ($('rankName').value || '').trim().slice(0, 8) || 'ななしさん';
+    store.set('kumausa-name', name === 'ななしさん' ? '' : name);
+    const d = new Date(), list = loadRank(pending.m);
+    const entry = { id: `${d.getTime()}-${Math.random().toString(36).slice(2, 6)}`, name, score: pending.score, eaten: pending.eaten, maxCombo: pending.maxCombo, level: pending.level, date: `${d.getMonth() + 1}/${d.getDate()}` };
+    list.splice(rankPlace(list, entry.score), 0, entry);
+    store.set(rankKey(pending.m), list.slice(0, RANK_MAX));
+    pending = null; $('rankForm').hidden = true;
+    renderRank($('overRank'), loadRank(mode), entry.id);
+    tone(988, 0, .12, 'triangle', .08); tone(1319, .08, .16, 'triangle', .08);
+  }
+  let rankTab = 'zen';
+  function openRanking(m) {
+    rankTab = m || rankTab;
+    $('tabZen').setAttribute('aria-selected', String(rankTab === 'zen'));
+    $('tabCh').setAttribute('aria-selected', String(rankTab === 'challenge'));
+    const list = loadRank(rankTab);
+    renderRank($('rankList'), list, null); $('rankEmpty').hidden = list.length > 0;
+    $('rankOv').hidden = false;
+  }
+  function gameOver(quit) {
+    playing = false; paused = false; bgmStop();
+    $('pauseOv').hidden = true;
+    setTimeout(showResult, quit ? 0 : 900);
   }
   function loseLife() {
     if (mode !== 'challenge') return;
@@ -800,6 +895,7 @@ body {
     drag = null;
   });
   addEventListener('keydown', e => {
+    if (e.target && e.target.tagName === 'INPUT') return;   // typing a name
     if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { feed('bear'); e.preventDefault(); }
     else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { feed('rabbit'); e.preventDefault(); }
     else if ((e.key === 'Escape' || e.key === 'p') && playing) setPaused(!paused);
@@ -810,7 +906,13 @@ body {
   $('againBtn').addEventListener('click', () => startGame(mode));
   $('pauseBtn').addEventListener('click', () => { if (playing) setPaused(!paused); });
   $('resumeBtn').addEventListener('click', () => setPaused(false));
-  $('menuBtn').addEventListener('click', toMenu);
+  $('menuBtn').addEventListener('click', () => { if (playing) gameOver(true); else toMenu(); });
+  $('overMenuBtn').addEventListener('click', () => { pending = null; toMenu(); });
+  $('rankForm').addEventListener('submit', e => { e.preventDefault(); saveRank(); });
+  $('rankBtn').addEventListener('click', () => openRanking());
+  $('tabZen').addEventListener('click', () => openRanking('zen'));
+  $('tabCh').addEventListener('click', () => openRanking('challenge'));
+  $('rankClose').addEventListener('click', () => { $('rankOv').hidden = true; });
   ['muteBtn1', 'muteBtn2'].forEach(id => $(id).addEventListener('click', () => { muted = !muted; store.set('kumausa-muted', muted); renderMute(); }));
   ['bgmBtn1', 'bgmBtn2'].forEach(id => $(id).addEventListener('click', () => {
     bgmOn = !bgmOn; store.set('kumausa-bgm', bgmOn); renderMute();
