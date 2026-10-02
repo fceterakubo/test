@@ -322,7 +322,7 @@ body {
   let W = 0, H = 0, L = {}, dpr = 1;
   let slots = [], fx = [], parts = [], pops = [];
   let mode = 'zen', playing = false, paused = false, score = 0, combo = 0, lives = 3;
-  let eaten = 0, maxCombo = 0, fever = 0, level = 1;   // fever = seconds of bonus time left
+  let eaten = 0, maxCombo = 0, fever = 0, level = 1, boost = 0;   // boost = level-up effect timer   // fever = seconds of bonus time left
   const FEVER_EVERY = 10, FEVER_TIME = 5;
   let muted = store.get('kumausa-muted', false);
   let bgmOn = store.get('kumausa-bgm', true);
@@ -560,6 +560,15 @@ body {
   const sfxYum = () => { const n = SCALE[Math.min(combo, 20) % SCALE.length]; tone(n, 0, .12, 'triangle'); tone(n * 1.5, .07, .14, 'sine', .08); };
   const sfxNo = () => { tone(240, 0, .12, 'square', .04); tone(190, .1, .18, 'square', .04); };
     const sfxParty = () => [659, 784, 988, 1319].forEach((f, i) => tone(f, i * .08, .18, 'triangle', .09));
+  // rising whoosh for a speed-up
+  const sfxWhoosh = () => {
+    const a = audio(); if (!a) return;
+    const o = a.createOscillator(), g = a.createGain(), t = a.currentTime;
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(1320, t + .45);
+    const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1800;
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.05, t + .08); g.gain.exponentialRampToValueAtTime(.0001, t + .5);
+    o.connect(f).connect(g).connect(a.destination); o.start(t); o.stop(t + .55);
+  };
   const sfxSlide = () => {
     const a = audio(); if (!a) return;
     const len = a.sampleRate * .25, buf = a.createBuffer(1, len, a.sampleRate), d = buf.getChannelData(0);
@@ -596,12 +605,18 @@ body {
     return best;
   }
   const count = () => slots.filter(Boolean).length;
-  // base speed climbs one level every LEVEL_EVERY points (+10% per level, capped per mode)
-  const LEVEL_EVERY = 50;
+  // Base speed climbs one level every LEVEL_EVERY points. Each level multiplies the speed by the same
+  // ratio (about +9.6%), so every step feels alike and Lv.13 lands on 3x the starting speed.
+  // Relaxed mode stops at 2.2x so the spinning table never gets dizzying (fever included).
+  const LEVEL_EVERY = 50, SPEED_STEP = Math.pow(3, 1 / 12);
+  const speedCap = () => mode === 'challenge' ? 3 : 2.2;
   const levelOf = sc => 1 + Math.floor(sc / LEVEL_EVERY);
-  const speedMul = () => Math.min(mode === 'challenge' ? 2.2 : 1.6, 1 + (level - 1) * .1);
-  const spinSpeed = () => TAU / 11 * speedMul() * (fever > 0 ? 1.5 : 1);
-  const spawnEvery = () => (mode === 'challenge' ? Math.max(.5, 1.4 / speedMul()) : Math.max(.8, 1.6 / speedMul())) * (fever > 0 ? .5 : 1);
+  const speedMul = () => Math.min(speedCap(), Math.pow(SPEED_STEP, level - 1));
+  const spinSpeed = () => {
+    const m = speedMul() * (fever > 0 ? 1.5 : 1);
+    return TAU / 11 * (mode === 'challenge' ? m : Math.min(speedCap(), m));
+  };
+  const spawnEvery = () => (mode === 'challenge' ? 1.4 : 1.6) / speedMul() * (fever > 0 ? .5 : 1);
   function trySpawn() {
     let back = -1, bd = 1e9;
     slots.forEach((it, i) => { const d = adiff(slotAngle(i), -Math.PI / 2); if (d < bd) { bd = d; back = i; } });
@@ -611,7 +626,7 @@ body {
 
   // ---------------- game flow ----------------
   function startGame(m) {
-    mode = m; score = 0; combo = 0; lives = 3; eaten = 0; maxCombo = 0; fever = 0; level = 1; playing = true; paused = false; spawnT = .6;
+    mode = m; score = 0; combo = 0; lives = 3; eaten = 0; maxCombo = 0; fever = 0; level = 1; boost = 0; playing = true; paused = false; spawnT = .6;
     for (const k in animals) Object.assign(animals[k], { mood: 'idle', moodT: 0, hold: null, belly: 0, party: 0, bubble: null });
     parts = []; pops = []; fx = []; drag = null; prefill();
     $('startOv').hidden = $('overOv').hidden = $('pauseOv').hidden = true;
@@ -704,6 +719,7 @@ body {
         if (combo % FEVER_EVERY === 0) pops.push({ x: L.cx, y: L.hudH + 70, text: `スピードアップ！ Lv.${level}`, life: 1.4, color: '#FF8A1F', big: true });
         else banner(`スピードアップ！ Lv.${level}`);
         [523, 659, 784, 1047].forEach((f, i) => tone(f, .1 + i * .05, .14, 'square', .035));
+        boost = 1; sfxWhoosh();
       }
       it.state = 'gone';
     } else {
@@ -806,6 +822,7 @@ body {
   // ---------------- update ----------------
   function step(dt) {
     clock += dt;
+    boost = Math.max(0, boost - dt / 1.1);
     for (const k in animals) {
       const an = animals[k];
       an.blinkT -= dt; if (an.blinkT < -.13) an.blinkT = 2 + Math.random() * 3;
@@ -896,6 +913,26 @@ body {
   const MOUTH = { bear: { dx: -20, up: 115 }, rabbit: { dx: 8, up: 80 } };
   function mouthPos(an) { const m = MOUTH[an.kind]; return { x: an.x + m.dx * L.sprScale, y: L.baseY - m.up * L.sprScale }; }
   function animalTop(an) { const im = SPR[spriteFor(an)]; return L.baseY - (ok(im) ? im.naturalHeight : 360) * L.sprScale; }
+  // level-up effect: speed lines bursting out from the table and an expanding ring
+  function drawSpeedUp(b) {
+    const t = 1 - b, cx = L.cx, cy = L.tableY, R = Math.max(W, H);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, b * 1.6);
+    ctx.lineWidth = Math.max(2, L.k * .12 * b); ctx.strokeStyle = '#FFB300';
+    ctx.beginPath(); ctx.ellipse(cx, cy, L.rx * (1 + t * .9), L.ry * (1 + t * .9), 0, 0, TAU); ctx.stroke();
+    if (!reduceMotion) {
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 36; i++) {
+        const a = i * TAU / 36 + (i % 3) * .05, seed = (i * 37) % 11 / 11;
+        const r0 = (.75 + seed * .3 + t * 1.1) * L.rx, len = (.25 + seed * .35) * L.rx * (1 - t * .5);
+        const ex = Math.cos(a), ey = Math.sin(a) * L.ry / L.rx;
+        ctx.strokeStyle = i % 2 ? 'rgba(255,255,255,.95)' : 'rgba(255,214,90,.95)';
+        ctx.lineWidth = Math.max(2, L.k * (.05 + seed * .05));
+        ctx.beginPath(); ctx.moveTo(cx + ex * r0, cy + ey * r0); ctx.lineTo(cx + ex * Math.min(R, r0 + len), cy + ey * Math.min(R, r0 + len)); ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
   function draw() {
     ctx.drawImage(bgc, 0, 0, W, H);
     if (fever > 0) {
@@ -949,6 +986,7 @@ body {
     }
     for (const it of fx) drawFoodAt(it.type, it.x, it.y, it.sc, it.rot, it.a, false, it.gold);
     slots.forEach(it => { if (it && (it.state === 'drag' || it.state === 'return')) drawFoodAt(it.type, it.x, it.y, L.s * (it.state === 'drag' ? 1.1 : 1), 0, 1, it.state === 'drag', it.gold); });
+    if (boost > 0) drawSpeedUp(boost);
     for (const p of parts) {
       ctx.globalAlpha = Math.min(1, p.life);
       if (p.kind === 'heart') heart(ctx, p.x, p.y, p.size, p.col); else sparkle(ctx, p.x, p.y, p.size * .6, p.col);
