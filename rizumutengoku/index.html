@@ -143,8 +143,7 @@ const SND = {
   jump(d, t, grade) {
     // 成功音：なわの「パシッ」＋ジャンプの「ぴょん」
     noise(d, t, 0.05, 0.5, "bandpass", 3000, 2);
-    const o = tone(d, t, 500, "square", 0.12, grade === "just" ? 0.18 : 0.12);
-    o.frequency.exponentialRampToValueAtTime(grade === "barely" ? 700 : 1100, t + 0.1);
+    if (grade === "barely") tone(d, t, 300, "sawtooth", 0.06, 0.08);
   },
   miss(d, t) {
     const o = tone(d, t, 220, "sawtooth", 0.3, 0.25);
@@ -154,17 +153,20 @@ const SND = {
   whiff(d, t) { noise(d, t, 0.08, 0.15, "bandpass", 1200, 3); },
 };
 
-// 伴奏（C - Am - F - G）
+// ベース（土台）：C - Am - F - G を4分音符で刻むだけ。メロディは持たない
 const ROOTS = [0, 9, 5, 7];
-const MELODY = [
-  [12, null, 16, 19, 16, null, 14, 12],
-  [9, null, 12, 16, 14, 12, 9, null],
-  [9, 12, 14, null, 12, 9, 7, null],
-  [7, null, 11, 14, 12, 11, 7, null],
-];
+// リード：ジャンプのタイミングでだけ鳴る。和音の構成音から選ぶ
+const CHORD_TONES = [[60, 64, 67, 72], [57, 60, 64, 69], [57, 60, 65, 69], [55, 59, 62, 67]];
+const LEAD_STEP = [0, 1, 2, 3, 3, 2, 1, 2];
+
+function leadNote(h) {
+  const tones = CHORD_TONES[Math.floor(h.beat / 4) % 4];
+  if (h.iv > 1) return tones[0] - 12;
+  return tones[LEAD_STEP[Math.floor((h.beat % 4) * 2)]] + (h.iv < 1 ? 12 : 0);
+}
 
 function scheduleSong(g) {
-  const { music, sfx, t0, endBeat } = g;
+  const { music, lead, sfx, t0, endBeat } = g;
   const bt = b => t0 + b * BEAT;
 
   // カウントイン
@@ -172,18 +174,20 @@ function scheduleSong(g) {
 
   for (let b = 0; b < endBeat; b++) {
     const inBar = b % 4, bar = Math.floor(b / 4);
-    SND.hat(music, bt(b), 0.18); SND.hat(music, bt(b + 0.5), 0.08);
+    SND.hat(music, bt(b), 0.12);
     if (b < 4) continue;
     if (inBar === 0 || inBar === 2) SND.kick(music, bt(b));
     if (inBar === 1 || inBar === 3) SND.snare(music, bt(b));
-    const root = ROOTS[bar % 4];
-    for (let e = 0; e < 2; e++) {
-      const n = 36 + root + (e === 1 && inBar % 2 === 1 ? 12 : 0);
-      tone(music, bt(b + e / 2), midi(n), "triangle", 0.22, 0.45);
-      const m = MELODY[bar % 4][inBar * 2 + e];
-      if (m !== null) tone(music, bt(b + e / 2), midi(60 + m), "square", 0.18, 0.08);
-    }
+    tone(music, bt(b), midi(36 + ROOTS[bar % 4]), "triangle", 0.35, 0.5);
   }
+
+  // リード：遊ぶ音。変則リズムがそのまま旋律として聞こえる
+  for (const h of g.hits) {
+    const dur = h.iv > 1 ? 0.7 : h.iv < 1 ? 0.12 : 0.25;
+    tone(lead, h.t, midi(leadNote(h)), "square", dur, 0.16);
+    tone(lead, h.t, midi(leadNote(h) + 12), "triangle", dur * 0.6, 0.08);
+  }
+
   // しめ
   const tEnd = bt(endBeat);
   SND.kick(music, tEnd); SND.crash(music, tEnd);
@@ -201,7 +205,8 @@ try { offsetMs = Number(localStorage.getItem("nawa.offset")) || 0; } catch (e) {
 function buildGame() {
   const c = A.ctx;
   const bus = c.createGain(); bus.gain.value = 0.9; bus.connect(c.destination);
-  const music = c.createGain(); music.gain.value = 0.5; music.connect(bus);
+  const music = c.createGain(); music.gain.value = 0.4; music.connect(bus);
+  const lead = c.createGain(); lead.gain.value = 0.9; lead.connect(bus);
   const sfx = c.createGain(); sfx.gain.value = 1; sfx.connect(bus);
   const t0 = c.currentTime + 0.4;
 
@@ -220,7 +225,7 @@ function buildGame() {
   const lastBeat = hits[hits.length - 1].beat;
   const endBeat = Math.ceil((lastBeat + 1) / 4) * 4;
   return {
-    bus, music, sfx, t0, hits, cues, endBeat,
+    bus, music, lead, sfx, t0, hits, cues, endBeat,
     tEnd: t0 + (endBeat + 3) * BEAT,
     player: { jumpAt: -9, kind: null, tripAt: -9, fx: [] },
     empty: 0, over: false,
@@ -356,6 +361,37 @@ function drawRope(l, r, phase, front) {
   cx.beginPath(); cx.moveTo(l.x, l.y); cx.quadraticCurveTo(400, cy, r.x, r.y); cx.stroke();
 }
 
+function nearestHit(tv) {
+  if (!G) return null;
+  let best = null;
+  for (const h of G.hits) {
+    const d = tv - h.t;
+    if (d < -1) break;
+    if (d >= 0 && d < 0.25) best = h;
+  }
+  return best;
+}
+
+function drawGroundCue(tv, phase) {
+  // なわの影：地面に近づくほど濃く、小さく集まる
+  const near = (Math.cos(phase * Math.PI * 2) + 1) / 2; // 1=地面, 0=頂点
+  cx.fillStyle = `rgba(90,50,20,${0.08 + 0.32 * near * near})`;
+  cx.beginPath(); cx.ellipse(400, GROUND + 14, 260 - 170 * near, 5 + 4 * near, 0, 0, 7); cx.fill();
+  // 地面に当たった瞬間の土ぼこり
+  const h = nearestHit(tv);
+  if (h) {
+    const e = (tv - h.t) / 0.25;
+    cx.fillStyle = `rgba(140,110,70,${0.6 * (1 - e)})`;
+    for (const dx of [-1, 1]) {
+      for (let i = 0; i < 3; i++) {
+        cx.beginPath();
+        cx.arc(400 + dx * (60 + 70 * e + i * 18), GROUND + 6 - 18 * e - i * 6, 7 - i * 1.5, 0, 7);
+        cx.fill();
+      }
+    }
+  }
+}
+
 function drawPlayer(tv) {
   const p = G ? G.player : { jumpAt: -9, kind: null, tripAt: -9, fx: [] };
   let lift = 0, tilt = 0;
@@ -447,6 +483,7 @@ function draw() {
   const l = bean(120, GROUND, 64, 160, "#5aa9e6", 1, phase);
   const r = bean(680, GROUND, 64, 160, "#f28ab2", -1, phase);
 
+  drawGroundCue(tv, phase);
   if (back) drawRope(l, r, phase, false);
   drawPlayer(tv);
   if (!back) drawRope(l, r, phase, true);
