@@ -73,6 +73,12 @@ body {
 }
 .lives-pill svg { width: 28px; height: 26px; transition: transform .2s; }
 .lives-pill svg.lost { transform: scale(.85); }
+.lv-pill {
+  font: 800 14px/1 var(--display); color: #fff; padding: 9px 12px; border-radius: 999px; border: 3px solid var(--white);
+  background: linear-gradient(#FFB547, #FF8A1F); box-shadow: 0 4px 0 rgba(212, 111, 6, .35); font-variant-numeric: tabular-nums;
+}
+.lv-pill.up { animation: lvup .6s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes lvup { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
 .mode-pill { font: 800 14px/1 var(--display); color: var(--green); padding: 9px 14px; border-color: #DDF3DE; box-shadow: 0 4px 0 rgba(78, 190, 85, .25); }
 .round-btn {
   pointer-events: auto; width: 48px; height: 48px; border-radius: 50%; border: 3px solid var(--white); cursor: pointer; padding: 0;
@@ -155,6 +161,7 @@ body {
     </div>
     <div class="hud-right">
       <div class="lives-pill" id="lives" hidden></div>
+      <div class="lv-pill" id="lvPill" aria-label="スピードレベル">Lv.1</div>
       <div class="mode-pill" id="modePill">のんびり</div>
       <button class="round-btn" id="pauseBtn" type="button" aria-label="ポーズ">
         <svg width="20" height="22" viewBox="0 0 20 22" aria-hidden="true"><rect x="2" y="1" width="6" height="20" rx="3" fill="#fff"/><rect x="12" y="1" width="6" height="20" rx="3" fill="#fff"/></svg>
@@ -174,7 +181,7 @@ body {
         <li class="bear"><canvas data-icon="pancake" width="104" height="104"></canvas><span class="arrow">→</span><canvas data-icon="bear" width="104" height="104"></canvas><span>パンケーキは<br><b>くまちゃん</b></span></li>
         <li class="rabbit"><canvas data-icon="shake" width="104" height="104"></canvas><span class="arrow">→</span><canvas data-icon="rabbit" width="104" height="104"></canvas><span>ミルクシェーキは<br><b>うさぎちゃん</b></span></li>
       </ul>
-      <p class="how">10コンボで <b>フィーバータイム</b>（5びょう・てんすう2ばい）！ キラキラの <b>ゴールデン</b> は 3ばい。<br>まるいテーブルが くるくる まわるよ。<br>たべものを 左右に <b>スワイプ</b>、または 画面の 左／右を <b>タップ</b> して とどけよう。<br>← → キー でも OK。</p>
+      <p class="how">10コンボで <b>フィーバータイム</b>（5びょう・てんすう2ばい）！ キラキラの <b>ゴールデン</b> は 3ばい。<br>50てん ごとに <b>スピードアップ</b>！ まるいテーブルが くるくる まわるよ。<br>たべものを 左右に <b>スワイプ</b>、または 画面の 左／右を <b>タップ</b> して とどけよう。<br>← → キー でも OK。</p>
       <div class="btns">
         <button class="btn green" id="zenBtn" type="button"><span class="tri"></span>スタート <small>のんびり・ずっとあそべる</small></button>
         <button class="btn orange" id="chBtn" type="button">チャレンジ <small>ライフ3つ</small></button>
@@ -315,7 +322,7 @@ body {
   let W = 0, H = 0, L = {}, dpr = 1;
   let slots = [], fx = [], parts = [], pops = [];
   let mode = 'zen', playing = false, paused = false, score = 0, combo = 0, lives = 3;
-  let eaten = 0, maxCombo = 0, fever = 0;   // fever = seconds of bonus time left
+  let eaten = 0, maxCombo = 0, fever = 0, level = 1;   // fever = seconds of bonus time left
   const FEVER_EVERY = 10, FEVER_TIME = 5;
   let muted = store.get('kumausa-muted', false);
   let bgmOn = store.get('kumausa-bgm', true);
@@ -589,8 +596,12 @@ body {
     return best;
   }
   const count = () => slots.filter(Boolean).length;
-  const spinSpeed = () => TAU / 11 * (1 + Math.min(1, eaten / 100) * (mode === 'challenge' ? 1 : .5)) * (fever > 0 ? 1.5 : 1);
-  const spawnEvery = () => (mode === 'challenge' ? Math.max(.55, 1.4 - eaten * .01) : Math.max(.9, 1.6 - eaten * .006)) * (fever > 0 ? .5 : 1);
+  // base speed climbs one level every LEVEL_EVERY points (+10% per level, capped per mode)
+  const LEVEL_EVERY = 50;
+  const levelOf = sc => 1 + Math.floor(sc / LEVEL_EVERY);
+  const speedMul = () => Math.min(mode === 'challenge' ? 2.2 : 1.6, 1 + (level - 1) * .1);
+  const spinSpeed = () => TAU / 11 * speedMul() * (fever > 0 ? 1.5 : 1);
+  const spawnEvery = () => (mode === 'challenge' ? Math.max(.5, 1.4 / speedMul()) : Math.max(.8, 1.6 / speedMul())) * (fever > 0 ? .5 : 1);
   function trySpawn() {
     let back = -1, bd = 1e9;
     slots.forEach((it, i) => { const d = adiff(slotAngle(i), -Math.PI / 2); if (d < bd) { bd = d; back = i; } });
@@ -600,7 +611,7 @@ body {
 
   // ---------------- game flow ----------------
   function startGame(m) {
-    mode = m; score = 0; combo = 0; lives = 3; eaten = 0; maxCombo = 0; fever = 0; playing = true; paused = false; spawnT = .6;
+    mode = m; score = 0; combo = 0; lives = 3; eaten = 0; maxCombo = 0; fever = 0; level = 1; playing = true; paused = false; spawnT = .6;
     for (const k in animals) Object.assign(animals[k], { mood: 'idle', moodT: 0, hold: null, belly: 0, party: 0, bubble: null });
     parts = []; pops = []; fx = []; drag = null; prefill();
     $('startOv').hidden = $('overOv').hidden = $('pauseOv').hidden = true;
@@ -620,7 +631,7 @@ body {
     playing = false; bgmStop();
     setTimeout(() => {
       $('finalScore').textContent = score;
-      $('overStats').textContent = `とどけた かず ${eaten} こ ／ さいだい ${maxCombo} コンボ`;
+      $('overStats').textContent = `とどけた かず ${eaten} こ ／ さいだい ${maxCombo} コンボ ／ Lv.${level}`;
       $('overBest').textContent = `ベスト ${store.get(bestKey(), 0)} てん`;
       $('overOv').hidden = false;
     }, 900);
@@ -639,6 +650,7 @@ body {
   const HEART = full => `<svg viewBox="0 0 28 26" class="${full ? '' : 'lost'}" aria-hidden="true"><path d="M14 24.5C6 18.6 1.5 14 1.5 8.6 1.5 4.8 4.4 2 8 2c2.6 0 4.6 1.4 6 3.5C15.4 3.4 17.4 2 20 2c3.6 0 6.5 2.8 6.5 6.6 0 5.4-4.5 10-12.5 15.9z" fill="${full ? '#FF4F7B' : '#E9E1E8'}" stroke="${full ? '#E0335F' : '#D6CCD5'}" stroke-width="1.5"/>${full ? '<ellipse cx="8.5" cy="8" rx="2.6" ry="1.8" fill="#fff" opacity=".75" transform="rotate(-30 8.5 8)"/>' : ''}</svg>`;
   function updateHud() {
     $('score').textContent = score;
+    $('lvPill').textContent = `Lv.${level}`;
     const cc = $('combo'), left = FEVER_EVERY - combo % FEVER_EVERY;
     cc.hidden = combo < 3 || fever > 0; cc.textContent = `${combo} コンボ！ フィーバーまで あと${left}`;
     $('feverChip').hidden = !(fever > 0);
@@ -685,7 +697,14 @@ body {
       const n = reduceMotion ? 3 : 7;
       for (let i = 0; i < n; i++) parts.push({ kind: i % 2 ? 'heart' : 'spark', x: an.x + (Math.random() - .5) * L.r * 1.6, y: L.headY - L.r * .2, vx: (Math.random() - .5) * 80, vy: -70 - Math.random() * 80, life: 1, size: L.r * (.2 + Math.random() * .12), col: i % 2 ? pick(['#FF6F9C', '#FF9EC0']) : pick(['#FFD54A', '#FFE98A']) });
       if (an.belly % 10 === 0) party(an);
+      const newLv = levelOf(score), leveled = newLv > level;
+      if (leveled) { level = newLv; const lp = $('lvPill'); lp.classList.remove('up'); void lp.offsetWidth; lp.classList.add('up'); }
       if (combo % FEVER_EVERY === 0) startFever();
+      if (leveled) {
+        if (combo % FEVER_EVERY === 0) pops.push({ x: L.cx, y: L.hudH + 70, text: `スピードアップ！ Lv.${level}`, life: 1.4, color: '#FF8A1F', big: true });
+        else banner(`スピードアップ！ Lv.${level}`);
+        [523, 659, 784, 1047].forEach((f, i) => tone(f, .1 + i * .05, .14, 'square', .035));
+      }
       it.state = 'gone';
     } else {
       combo = 0; endFever('フィーバー おしまい');
@@ -981,14 +1000,14 @@ body {
   function boot(data) {
     makeGoldSprites(); renderMute(); layout(); makeGingham(); prefill(); updateHud(); drawIcons();
     if (data && data.playing) {
-      mode = data.mode || 'zen'; score = data.score || 0; combo = data.combo || 0; lives = data.lives ?? 3; eaten = data.eaten || 0; maxCombo = data.maxCombo || 0;
+      mode = data.mode || 'zen'; score = data.score || 0; combo = data.combo || 0; lives = data.lives ?? 3; eaten = data.eaten || 0; maxCombo = data.maxCombo || 0; level = data.level || levelOf(score);
       playing = true; $('startOv').hidden = true; $('lives').hidden = mode !== 'challenge'; $('modePill').hidden = mode === 'challenge'; updateHud();
     }
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { buildBg(); drawIcons(); });
     addEventListener('resize', () => { layout(); makeGingham(); });
     requestAnimationFrame(t => { lastT = t; frame(t); });
   }
-  window.claude?.hot?.snapshot?.(() => ({ mode, score, combo, lives, playing, eaten, maxCombo }));
+  window.claude?.hot?.snapshot?.(() => ({ mode, score, combo, lives, playing, eaten, maxCombo, level }));
   const bootWhenReady = d => sprReady.then(() => boot(d));
   window.claude?.hot?.ready ? window.claude.hot.ready(bootWhenReady) : bootWhenReady(window.claude?.hot?.data ?? {});
 })();
