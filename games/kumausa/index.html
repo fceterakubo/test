@@ -924,7 +924,9 @@ body {
     if (!bgmOn) bgmStop(); else if (playing && !paused) bgmStart();
   }));
   document.addEventListener('visibilitychange', () => { if (document.hidden && playing) setPaused(true); });
-  addEventListener('blur', () => { if (playing) setPaused(true); });
+  // Only pause when the page is really hidden (app switch, tab change, screen off). Window 'blur' is not used:
+  // some phone in-app browsers fire it on ordinary taps, which paused the game after every move.
+  addEventListener('pagehide', () => { if (playing) setPaused(true); });
 
   // ---------------- update ----------------
   function step(dt) {
