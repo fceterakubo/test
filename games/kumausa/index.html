@@ -370,7 +370,7 @@ body {
   const FEVER_EVERY = 10, FEVER_TIME = 5;
   let muted = store.get('kumausa-muted', false);
   let bgmOn = store.get('kumausa-bgm', true);
-  let spin = 0, spawnT = 0, lastT = 0, clock = 0, drag = null;
+  let spin = 0, lastT = 0, clock = 0, drag = null;
   const animals = {
     bear:   { kind: 'bear',   food: 'pancake', dir: 1,  mood: 'idle', moodT: 0, hold: null, belly: 0, party: 0, blinkT: 2, bubble: null },
     rabbit: { kind: 'rabbit', food: 'shake',   dir: -1, mood: 'idle', moodT: 0, hold: null, belly: 0, party: 0, blinkT: 3.3, bubble: null }
@@ -390,14 +390,14 @@ body {
     const r = .95 * k;
     const rx = Math.max(2.4 * k, Math.min(W / 2 - 12, 4.8 * k));
     const tableY = hudH + (H - hudH) * .62;
-    const ry = Math.max(.9 * k, Math.min(rx * (W < H ? .55 : .42), H - tableY - 1.9 * k));
+    const ry = Math.max(.9 * k, Math.min(rx * (W < H ? .7 : .42), H - tableY - 1.9 * k));
     // Portrait phones are width-limited, so size the food from the table width instead of k
     // (about 1.6x larger than before on a 390px phone) and widen the turntable ring to fit it.
     const portrait = W < H;
-    const ringR = portrait ? .5 : .42;
-    const s = portrait ? clamp(rx * .44, 28, 100) : clamp(Math.min(.95 * k, rx * .38), 28, 100);
+    const ringR = portrait ? .62 : .5;
+    const s = portrait ? clamp(rx * .4, 28, 100) : clamp(Math.min(.95 * k, rx * .38), 28, 100);
     const ringAvg = Math.sqrt(((rx * ringR) ** 2 + (ry * ringR) ** 2) / 2);
-    const n = clamp(Math.floor(TAU * ringAvg / (s * 1.15)), 5, 10);
+    const n = clamp(Math.floor(TAU * ringAvg / (s * 1.02)), 6, 12);
     // characters sit behind the far side of the table; the table top hides their lower half
     const sprScale = Math.min((W / 2 - 6) / 380, (tableY - hudH - 40) / 400, rx / 345);
     const off = Math.min(rx * .64, W / 2 - 190 * sprScale - 4);
@@ -636,22 +636,24 @@ body {
     return { x: L.cx + Math.cos(a) * L.rx * L.ringR, y: L.tableY - .04 * L.k + Math.sin(a) * L.ry * L.ringR - .3 * sc, sc, d };
   }
   const newItem = () => ({ type: Math.random() < .5 ? 'pancake' : 'shake', gold: playing && Math.random() < (fever > 0 ? .25 : .07), state: 'ring', pop: 0, rot: 0 });
+  // start with the back of the table full and the serving window empty, so nobody misses in the first second
   function prefill() {
-    slots = Array.from({ length: L.n }, () => null);
-    for (let i = 0; i < L.n; i++) if (i % 3 !== 2) slots[i] = Object.assign(newItem(), { pop: 1 });
+    slots = Array.from({ length: L.n }, (_, i) => progress(slotAngle(i)) <= WIN_SPAN ? null : Object.assign(newItem(), { pop: 1 }));
   }
-  // The next item to serve, in the order the turntable brings them to the front (right -> front -> left).
-  // An item that has only just slid past the front still counts, so the target never jumps backwards to the left.
+  // Items can be served while they travel the front of the table: from the right edge (0) through the
+  // front (pi/2) to three quarters of the way across (3pi/4, front-left). The target is the item that
+  // has come furthest through that window; if none is inside yet, the next one about to enter.
+  const WIN_START = 0, WIN_END = Math.PI * .75, WIN_SPAN = WIN_END - WIN_START;
+  const progress = a => ((a - WIN_START) % TAU + TAU) % TAU;   // 0..WIN_SPAN while inside the window
   function frontSlot() {
-    const grace = Math.PI / slots.length * .9;
-    let best = -1, bd = 1e9;
+    let best = -1, bp = -1, next = -1, nd = 1e9;
     slots.forEach((it, i) => {
       if (!it || it.state !== 'ring') return;
-      const ahead = ((Math.PI / 2 - slotAngle(i)) % TAU + TAU) % TAU;   // how far it still has to travel to the front
-      const key = (ahead + grace) % TAU;
-      if (key < bd) { bd = key; best = i; }
+      const pr = progress(slotAngle(i));
+      if (pr <= WIN_SPAN) { if (pr > bp) { bp = pr; best = i; } }
+      else if (TAU - pr < nd) { nd = TAU - pr; next = i; }
     });
-    return best;
+    return best >= 0 ? best : next;
   }
   const count = () => slots.filter(Boolean).length;
   // Base speed climbs one level every LEVEL_EVERY points. Each level multiplies the speed by the same
@@ -664,9 +666,9 @@ body {
   const speedMul = () => Math.min(speedCap(), Math.pow(SPEED_STEP, level - 1));
   const spinSpeed = () => {
     const m = speedMul() * (fever > 0 ? 1.5 : 1);
-    return TAU / 11 * (hard() ? m : Math.min(speedCap(), m));
+    // one item reaches the front every 1.4 s at Lv.1 whatever the number of slots
+    return TAU / (1.4 * slots.length) * (hard() ? m : Math.min(speedCap(), m));
   };
-  const spawnEvery = () => (hard() ? 1.4 : 1.6) / speedMul() * (fever > 0 ? .5 : 1);
   function trySpawn() {
     let back = -1, bd = 1e9;
     slots.forEach((it, i) => { const d = adiff(slotAngle(i), -Math.PI / 2); if (d < bd) { bd = d; back = i; } });
@@ -676,7 +678,7 @@ body {
 
   // ---------------- game flow ----------------
   function startGame(m) {
-    mode = m; score = 0; combo = 0; lives = 3; eaten = 0; maxCombo = 0; fever = 0; level = 1; boost = 0; playing = true; paused = false; spawnT = .6;
+    mode = m; score = 0; combo = 0; lives = 3; eaten = 0; maxCombo = 0; fever = 0; level = 1; boost = 0; playing = true; paused = false;
     for (const k in animals) Object.assign(animals[k], { mood: 'idle', moodT: 0, hold: null, belly: 0, party: 0, bubble: null });
     parts = []; pops = []; fx = []; drag = null; prefill();
     $('startOv').hidden = $('overOv').hidden = $('pauseOv').hidden = $('rankOv').hidden = true;
@@ -948,23 +950,20 @@ body {
       if (fever <= 0) { fever = .0001; endFever('フィーバー おしまい'); }
     }
     spin += spinSpeed() * dt;
-    spawnT -= dt;
-    if (spawnT <= 0) {
-      const n = count(), cap = playing ? (mode === 'zen' ? slots.length - 1 : slots.length) : slots.length - 2;
-      if (n < cap) { if (trySpawn()) spawnT = playing ? spawnEvery() : 1.2; }
-      else if (playing && hard()) {
-        // the table is full: the front item tumbles off
-        const f = frontSlot();
-        if (f >= 0) {
-          const q = ringPos(slotAngle(f));
-          fx.push({ type: slots[f].type, gold: slots[f].gold, state: 'reject', x: q.x, y: q.y, sc: q.sc, vx: (Math.random() - .5) * L.k, vy: -L.k * 3, rot: 0, a: 1 });
-          slots[f] = null;
-        }
-        pops.push({ x: L.cx, y: L.tableY - L.ry - L.k * .6, text: 'テーブルがいっぱい！', life: 1.2, color: '#FF5D93' });
-        if (fever > 0) spawnT = spawnEvery();   // bonus time forgives a full table
-        else { combo = 0; sfxNo(); updateHud(); loseLife(); spawnT = spawnEvery(); }
-      }
-    }
+    // every empty slot is refilled as it passes the back, so food always arrives evenly spaced
+    if (count() < slots.length) trySpawn();
+    // in challenge / oni, food that gets past the end of the window falls off the table: a miss
+    if (playing && hard()) slots.forEach((it, i) => {
+      if (!it || it.state !== 'ring') return;
+      const past = ((slotAngle(i) - WIN_END) % TAU + TAU) % TAU;
+      if (past > .5) return;
+      const q = ringPos(slotAngle(i));
+      fx.push({ type: it.type, gold: it.gold, state: 'reject', x: q.x, y: q.y, sc: q.sc, vx: -L.k * 1.2, vy: -L.k * 3, rot: 0, a: 1 });
+      slots[i] = null;
+      pops.push({ x: q.x, y: q.y - L.s, text: 'あっ！', life: 1, color: '#2F86E0' });
+      if (fever > 0) return;   // bonus time forgives a miss
+      combo = 0; sfxNo(); updateHud(); loseLife();
+    });
     slots.forEach((it, i) => {
       if (!it) return;
       it.pop = Math.min(1, it.pop + dt * 4);
@@ -1072,7 +1071,9 @@ body {
       // blinking spotlight under the item
       E(ctx, q.x, gy, .9 * sc, .3 * sc, rad(ctx, q.x, gy, 0, q.x, gy, .9 * sc, [`rgba(255,240,140,${.35 + .45 * blink})`, 'rgba(255,220,80,0)']));
       ctx.save(); ctx.beginPath(); ctx.ellipse(q.x, gy, .62 * sc, .2 * sc, 0, 0, TAU);
-      ctx.lineWidth = Math.max(3, .07 * sc); ctx.strokeStyle = `rgba(255,190,30,${.45 + .55 * blink})`; ctx.stroke();
+      // turns red when the item is about to leave the window in challenge / oni
+      const urgent = hard() && progress(slotAngle(f)) > WIN_SPAN * .7;
+      ctx.lineWidth = Math.max(3, .07 * sc); ctx.strokeStyle = urgent ? `rgba(255,70,90,${.5 + .5 * blink})` : `rgba(255,190,30,${.45 + .55 * blink})`; ctx.stroke();
       ctx.lineWidth = Math.max(1.5, .03 * sc); ctx.strokeStyle = `rgba(255,255,255,${.5 + .5 * blink})`; ctx.stroke(); ctx.restore();
       // white glow behind the food that pulses with the blink
       ctx.save(); ctx.shadowColor = `rgba(255,236,120,${.5 + .5 * blink})`; ctx.shadowBlur = 18 + 14 * blink;
