@@ -48,6 +48,16 @@ body {
   box-shadow: 0 3px 0 #D9468A; animation: rainbow 1.2s linear infinite; text-shadow: 0 1px 0 rgba(0, 0, 0, .25);
 }
 .fever-chip i { position: absolute; left: 0; bottom: 0; height: 3px; background: #fff; border-radius: 3px; }
+.hunger-pill {
+  display: flex; align-items: center; gap: 5px; white-space: nowrap; font: 800 12px/1 var(--display); color: #8A5A2B;
+  background: var(--white); border: 2px solid #FFE0B8; border-radius: 999px; padding: 4px 9px; box-shadow: 0 3px 0 rgba(212, 111, 6, .2);
+}
+.hunger-pill i { width: 13px; height: 13px; border-radius: 50%; background: #F1E7DC; box-shadow: inset 0 0 0 2px #E5D3C0; }
+.hunger-pill i.on { background: radial-gradient(circle at 35% 35%, #FFC46B, #FF7A1A); box-shadow: inset 0 0 0 2px #E8650A; }
+.hunger-pill.warn { border-color: #FF8A5B; }
+.hunger-pill.shake { animation: shake .45s; }
+@keyframes shake { 20%, 60% { transform: translateX(-4px); } 40%, 80% { transform: translateX(4px); } }
+@media (prefers-reduced-motion: reduce) { .hunger-pill.shake { animation: none; } }
 @keyframes rainbow { to { background-position: 200% 0; } }
 @media (prefers-reduced-motion: reduce) { .fever-chip { animation: none; } }
 .stats { font: 700 13px var(--body); color: #7A5A46; margin: -8px 0 14px; }
@@ -179,6 +189,7 @@ body {
       </div>
       <div class="combo-chip" id="combo" hidden></div>
       <div class="fever-chip" id="feverChip" hidden>フィーバー ×2<i id="feverBar"></i></div>
+      <div class="hunger-pill" id="hungerPill" hidden aria-label="はらぺこゲージ">はらぺこ<i></i><i></i><i></i></div>
     </div>
     <div class="title-banner" aria-hidden="true">
       <div class="l1"><span class="o">パンケーキ</span> と <span class="p">ミルクシェーキ</span> を</div>
@@ -206,7 +217,7 @@ body {
         <li class="bear"><canvas data-icon="pancake" width="104" height="104"></canvas><span class="arrow">→</span><canvas data-icon="bear" width="104" height="104"></canvas><span>パンケーキは<br><b>くまちゃん</b></span></li>
         <li class="rabbit"><canvas data-icon="shake" width="104" height="104"></canvas><span class="arrow">→</span><canvas data-icon="rabbit" width="104" height="104"></canvas><span>ミルクシェーキは<br><b>うさぎちゃん</b></span></li>
       </ul>
-      <p class="how"><b>10コンボ</b>で フィーバー（てんすう2ばい）！ キラキラの <b>ゴールデン</b>は 3ばい。<br><b>50てん</b>ごとに スピードアップ！<br>画面の <b>左をタップ</b>で くまちゃん、<b>右をタップ</b>で うさぎちゃん。スワイプ や ← → キーも OK。</p>
+      <p class="how"><b>10コンボ</b>で フィーバー（てんすう2ばい）！ キラキラの <b>ゴールデン</b>は 3ばい。<br><b>50てん</b>ごとに スピードアップ！<br>チャレンジ・おには とりのがすと <b>はらぺこ</b>が たまるよ（3つで ライフ −1）。<br>画面の <b>左をタップ</b>で くまちゃん、<b>右をタップ</b>で うさぎちゃん。スワイプ や ← → キーも OK。</p>
       <div class="btns">
         <button class="btn green" id="zenBtn" type="button"><span class="tri"></span>スタート <small>のんびり・ずっとあそべる</small></button>
         <button class="btn orange" id="chBtn" type="button">チャレンジ <small>ライフ3つ</small></button>
@@ -366,7 +377,8 @@ body {
   let W = 0, H = 0, L = {}, dpr = 1;
   let slots = [], fx = [], parts = [], pops = [];
   let mode = 'zen', playing = false, paused = false, score = 0, combo = 0, lives = 3;
-  let eaten = 0, maxCombo = 0, fever = 0, level = 1, boost = 0;   // boost = level-up effect timer   // fever = seconds of bonus time left
+  let eaten = 0, maxCombo = 0, fever = 0, level = 1, boost = 0, hunger = 0;   // hunger = misses waiting to cost a life
+  const HUNGER_MAX = 3;   // boost = level-up effect timer   // fever = seconds of bonus time left
   const FEVER_EVERY = 10, FEVER_TIME = 5;
   let muted = store.get('kumausa-muted', false);
   let bgmOn = store.get('kumausa-bgm', true);
@@ -680,11 +692,11 @@ body {
 
   // ---------------- game flow ----------------
   function startGame(m) {
-    mode = m; score = 0; combo = 0; lives = 3; eaten = 0; maxCombo = 0; fever = 0; level = 1; boost = 0; playing = true; paused = false;
+    mode = m; score = 0; combo = 0; lives = 3; eaten = 0; maxCombo = 0; fever = 0; level = 1; boost = 0; hunger = 0; playing = true; paused = false;
     for (const k in animals) Object.assign(animals[k], { mood: 'idle', moodT: 0, hold: null, belly: 0, party: 0, bubble: null });
     parts = []; pops = []; fx = []; drag = null; prefill();
     $('startOv').hidden = $('overOv').hidden = $('pauseOv').hidden = $('rankOv').hidden = true;
-    $('lives').hidden = !hard(); $('modePill').hidden = hard(); $('lvPill').classList.toggle('oni', mode === 'oni');
+    $('lives').hidden = $('hungerPill').hidden = !hard(); $('modePill').hidden = hard(); $('lvPill').classList.toggle('oni', mode === 'oni');
     updateHud(); banner('がんばろう！');
     audio(); tone(784, 0, .1, 'triangle'); tone(1047, .08, .14, 'triangle');
     bgm.step = 0; bgmStop(); bgmStart();
@@ -772,6 +784,10 @@ body {
     $('feverChip').hidden = !(fever > 0);
     $('lives').innerHTML = [0, 1, 2].map(i => HEART(i < lives)).join('');
     $('lives').setAttribute('aria-label', `ライフ のこり ${lives}`);
+    const hp = $('hungerPill');
+    [...hp.querySelectorAll('i')].forEach((d, i) => d.classList.toggle('on', i < hunger));
+    hp.classList.toggle('warn', hunger >= HUNGER_MAX - 1);
+    hp.setAttribute('aria-label', `はらぺこゲージ ${hunger} / ${HUNGER_MAX}`);
   }
   function renderMute() {
     ['muteBtn1', 'muteBtn2'].forEach(id => { $(id).textContent = muted ? 'こうかおん：OFF' : 'こうかおん：ON'; $(id).setAttribute('aria-pressed', String(!muted)); });
@@ -801,6 +817,7 @@ body {
     const an = animals[it.who];
     if (it.type === an.food) {
       combo++; eaten++; maxCombo = Math.max(maxCombo, combo);
+      if (hunger > 0) hunger--;   // a good serve calms the hunger gauge
       const pts = (it.gold ? 3 : 1) * (fever > 0 ? 2 : 1);
       score += pts;
       if (score > store.get(bestKey(), 0)) store.set(bestKey(), score);
@@ -954,18 +971,26 @@ body {
     spin += spinSpeed() * dt;
     // every empty slot is refilled as it passes the back, so food always arrives evenly spaced
     if (count() < slots.length) trySpawn();
-    // In challenge / oni, letting food slip past the end of the window breaks the combo (and ends fever).
-    // It costs no life: the food simply goes round again. Lives are only lost by feeding the wrong animal.
+    // In challenge / oni, letting food slip past the end of the window breaks the combo (and ends fever)
+    // and fills the hunger gauge by one; a full gauge costs a life. The food itself goes round again.
     slots.forEach((it, i) => { if (it && it.state === 'ring' && progress(slotAngle(i)) <= WIN_SPAN) it.seen = true; });
     if (playing && hard()) slots.forEach((it, i) => {
       if (!it || it.state !== 'ring' || !it.seen) return;   // only food that actually went through the window counts
       const past = ((slotAngle(i) - WIN_END) % TAU + TAU) % TAU;
       if (past > .5) return;
       it.seen = false;   // it can come round and be served next time
-      if (combo === 0 && fever <= 0) return;
-      const q = ringPos(slotAngle(i));
-      pops.push({ x: q.x, y: q.y - L.s, text: 'あっ！ コンボが きれた', life: 1.1, color: '#2F86E0' });
-      combo = 0; endFever('フィーバー おしまい'); tone(330, 0, .15, 'sine', .06); updateHud();
+      const q = ringPos(slotAngle(i)), hadCombo = combo > 0 || fever > 0;
+      combo = 0; endFever('フィーバー おしまい');
+      hunger++;
+      const hp = $('hungerPill'); hp.classList.remove('shake'); void hp.offsetWidth; hp.classList.add('shake');
+      if (hunger >= HUNGER_MAX) {
+        hunger = 0;
+        pops.push({ x: q.x, y: q.y - L.s, text: 'おなか ぺこぺこ！', life: 1.2, color: '#FF5D93' });
+        sfxNo(); updateHud(); loseLife();
+      } else {
+        pops.push({ x: q.x, y: q.y - L.s, text: hadCombo ? 'あっ！ コンボが きれた' : 'はらぺこ +1', life: 1.1, color: '#2F86E0' });
+        tone(330, 0, .15, 'sine', .06); updateHud();
+      }
     });
     slots.forEach((it, i) => {
       if (!it) return;
@@ -1148,14 +1173,14 @@ body {
   function boot(data) {
     makeGoldSprites(); renderMute(); layout(); makeGingham(); prefill(); updateHud(); drawIcons();
     if (data && data.playing) {
-      mode = data.mode || 'zen'; score = data.score || 0; combo = data.combo || 0; lives = data.lives ?? 3; eaten = data.eaten || 0; maxCombo = data.maxCombo || 0; level = data.level || levelOf(score);
-      playing = true; $('startOv').hidden = true; $('lives').hidden = !hard(); $('modePill').hidden = hard(); $('lvPill').classList.toggle('oni', mode === 'oni'); updateHud();
+      mode = data.mode || 'zen'; score = data.score || 0; combo = data.combo || 0; lives = data.lives ?? 3; hunger = data.hunger || 0; eaten = data.eaten || 0; maxCombo = data.maxCombo || 0; level = data.level || levelOf(score);
+      playing = true; $('startOv').hidden = true; $('lives').hidden = $('hungerPill').hidden = !hard(); $('modePill').hidden = hard(); $('lvPill').classList.toggle('oni', mode === 'oni'); updateHud();
     }
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { buildBg(); drawIcons(); });
     addEventListener('resize', () => { layout(); makeGingham(); });
     requestAnimationFrame(t => { lastT = t; frame(t); });
   }
-  window.claude?.hot?.snapshot?.(() => ({ mode, score, combo, lives, playing, eaten, maxCombo, level }));
+  window.claude?.hot?.snapshot?.(() => ({ mode, score, combo, lives, playing, eaten, maxCombo, level, hunger }));
   const bootWhenReady = d => sprReady.then(() => boot(d));
   window.claude?.hot?.ready ? window.claude.hot.ready(bootWhenReady) : bootWhenReady(window.claude?.hot?.data ?? {});
 })();
