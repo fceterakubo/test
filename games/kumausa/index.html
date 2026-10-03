@@ -953,18 +953,18 @@ body {
     spin += spinSpeed() * dt;
     // every empty slot is refilled as it passes the back, so food always arrives evenly spaced
     if (count() < slots.length) trySpawn();
-    // in challenge / oni, food that gets past the end of the window falls off the table: a miss
+    // In challenge / oni, letting food slip past the end of the window breaks the combo (and ends fever).
+    // It costs no life: the food simply goes round again. Lives are only lost by feeding the wrong animal.
     slots.forEach((it, i) => { if (it && it.state === 'ring' && progress(slotAngle(i)) <= WIN_SPAN) it.seen = true; });
     if (playing && hard()) slots.forEach((it, i) => {
-      if (!it || it.state !== 'ring' || !it.seen) return;   // only food that actually went through the window can be missed
+      if (!it || it.state !== 'ring' || !it.seen) return;   // only food that actually went through the window counts
       const past = ((slotAngle(i) - WIN_END) % TAU + TAU) % TAU;
       if (past > .5) return;
+      it.seen = false;   // it can come round and be served next time
+      if (combo === 0 && fever <= 0) return;
       const q = ringPos(slotAngle(i));
-      fx.push({ type: it.type, gold: it.gold, state: 'reject', x: q.x, y: q.y, sc: q.sc, vx: -L.k * 1.2, vy: -L.k * 3, rot: 0, a: 1 });
-      slots[i] = null;
-      pops.push({ x: q.x, y: q.y - L.s, text: 'あっ！', life: 1, color: '#2F86E0' });
-      if (fever > 0) return;   // bonus time forgives a miss
-      combo = 0; sfxNo(); updateHud(); loseLife();
+      pops.push({ x: q.x, y: q.y - L.s, text: 'あっ！ コンボが きれた', life: 1.1, color: '#2F86E0' });
+      combo = 0; endFever('フィーバー おしまい'); tone(330, 0, .15, 'sine', .06); updateHud();
     });
     slots.forEach((it, i) => {
       if (!it) return;
