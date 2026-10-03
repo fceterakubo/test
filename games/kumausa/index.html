@@ -643,8 +643,9 @@ body {
   }
   // Items can be served while they travel the front of the table: from the right edge (0) through the
   // front (pi/2) to three quarters of the way across (3pi/4, front-left). The target is the item that
-  // has come furthest through that window; if none is inside yet, the next one about to enter.
-  const WIN_START = 0, WIN_END = Math.PI * .75, WIN_SPAN = WIN_END - WIN_START;
+  // has come furthest through that window; if none is inside yet, one that is just about to enter.
+  // Food further back can't be taken: otherwise grabbing it at the refill point let players skip the pace.
+  const WIN_START = 0, WIN_END = Math.PI * .75, WIN_SPAN = WIN_END - WIN_START, WIN_LEAD = Math.PI / 8;
   const progress = a => ((a - WIN_START) % TAU + TAU) % TAU;   // 0..WIN_SPAN while inside the window
   function frontSlot() {
     let best = -1, bp = -1, next = -1, nd = 1e9;
@@ -652,7 +653,7 @@ body {
       if (!it || it.state !== 'ring') return;
       const pr = progress(slotAngle(i));
       if (pr <= WIN_SPAN) { if (pr > bp) { bp = pr; best = i; } }
-      else if (TAU - pr < nd) { nd = TAU - pr; next = i; }
+      else if (TAU - pr < WIN_LEAD && TAU - pr < nd) { nd = TAU - pr; next = i; }
     });
     return best >= 0 ? best : next;
   }
