@@ -885,8 +885,10 @@ body {
     if (!playing || paused) { it.state = 'return'; return; }
     // a plain tap follows the same rule as everywhere else: left half -> bear, right half -> rabbit
     if (!moved) { sendSlot(i, p.x < L.cx ? 'bear' : 'rabbit'); return; }
-    const dx = p.x - drag0.sx, flick = Math.abs(dx) > 25 ? (dx < 0 ? 'bear' : 'rabbit') : null;
-    const tgt = dropTarget(p) || flick;
+    // a short sideways flick goes by its direction; only a long drag is matched to where it was dropped
+    const dx = p.x - drag0.sx, dy = p.y - drag0.sy, flick = Math.abs(dx) > 25 ? (dx < 0 ? 'bear' : 'rabbit') : null;
+    const shortFlick = flick && Math.hypot(dx, dy) < Math.min(W, H) * .3;
+    const tgt = shortFlick ? flick : (dropTarget(p) || flick);
     if (tgt) sendSlot(i, tgt); else it.state = 'return';
   });
   cv.addEventListener('pointercancel', e => {
