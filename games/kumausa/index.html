@@ -638,7 +638,8 @@ body {
   const newItem = () => ({ type: Math.random() < .5 ? 'pancake' : 'shake', gold: playing && Math.random() < (fever > 0 ? .25 : .07), state: 'ring', pop: 0, rot: 0 });
   // start with the back of the table full and the serving window empty, so nobody misses in the first second
   function prefill() {
-    slots = Array.from({ length: L.n }, (_, i) => progress(slotAngle(i)) <= WIN_SPAN ? null : Object.assign(newItem(), { pop: 1 }));
+    // also keep clear the stretch just past the window end, where a miss would be counted
+    slots = Array.from({ length: L.n }, (_, i) => progress(slotAngle(i)) <= WIN_SPAN + .6 ? null : Object.assign(newItem(), { pop: 1 }));
   }
   // Items can be served while they travel the front of the table: from the right edge (0) through the
   // front (pi/2) to three quarters of the way across (3pi/4, front-left). The target is the item that
@@ -953,8 +954,9 @@ body {
     // every empty slot is refilled as it passes the back, so food always arrives evenly spaced
     if (count() < slots.length) trySpawn();
     // in challenge / oni, food that gets past the end of the window falls off the table: a miss
+    slots.forEach((it, i) => { if (it && it.state === 'ring' && progress(slotAngle(i)) <= WIN_SPAN) it.seen = true; });
     if (playing && hard()) slots.forEach((it, i) => {
-      if (!it || it.state !== 'ring') return;
+      if (!it || it.state !== 'ring' || !it.seen) return;   // only food that actually went through the window can be missed
       const past = ((slotAngle(i) - WIN_END) % TAU + TAU) % TAU;
       if (past > .5) return;
       const q = ringPos(slotAngle(i));
